@@ -8,6 +8,8 @@
 
 当前已具备管理员/访客双端、文件/网页/Git 增量同步、持久化后台任务、GitHub Models Embedding、pgvector 检索、DeepSeek SSE 问答、证据化知识图谱、候选审核、学习复习、CI、可观测与部署基础。上传或同步完成解析后创建任务，Worker 自动完成 Embedding、活动版本切换和图谱候选抽取，管理员前端轮询进度。
 
+当前问答链路使用 pgvector 余弦 Top-K 检索、来源引用和资料不足拒答 Prompt；知识图谱用于证据抽取、候选审核、修订和复习任务，尚未并入问答检索。混合检索、Reranker、Query Rewrite 和通用工具调用属于后续评测驱动的优化，不是当前已完成功能。
+
 开发环境默认通过 OpenAI 兼容协议接入 DeepSeek，默认模型为 `deepseek-chat`。真实 API Key 仅通过本地 `.env` 的 `LLM_API_KEY` 注入，禁止提交到仓库。私人简历、学习笔记、项目源码与上传文件同样不得提交到公开仓库。
 
 ## 本地启动
