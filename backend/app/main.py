@@ -1,5 +1,6 @@
+import asyncio
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 
@@ -12,12 +13,22 @@ from app.infrastructure.observability import (
     RateLimitMiddleware,
     configure_logging,
 )
+from app.ingestion.tasks import create_worker
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    get_settings()
-    yield
+    settings = get_settings()
+    worker_task: asyncio.Task[None] | None = None
+    if settings.background_worker_enabled:
+        worker_task = asyncio.create_task(create_worker().run_forever())
+    try:
+        yield
+    finally:
+        if worker_task is not None:
+            worker_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await worker_task
 
 
 def create_app() -> FastAPI:

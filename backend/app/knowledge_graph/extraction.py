@@ -2,7 +2,7 @@ import hashlib
 import json
 import unicodedata
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import AliasChoices, BaseModel, Field, ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,15 +18,25 @@ from app.infrastructure.models import (
 
 class EntityCandidate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
-    entity_type: str = Field(min_length=1, max_length=50)
+    entity_type: str = Field(
+        min_length=1,
+        max_length=50,
+        validation_alias=AliasChoices("entity_type", "type"),
+    )
     summary: str | None = Field(default=None, max_length=2000)
     confidence: float = Field(ge=0, le=1)
 
 
 class RelationCandidate(BaseModel):
-    source: str = Field(min_length=1, max_length=200)
-    predicate: str = Field(min_length=1, max_length=100)
-    target: str = Field(min_length=1, max_length=200)
+    source: str = Field(
+        min_length=1, max_length=200, validation_alias=AliasChoices("source", "from")
+    )
+    predicate: str = Field(
+        min_length=1,
+        max_length=100,
+        validation_alias=AliasChoices("predicate", "type"),
+    )
+    target: str = Field(min_length=1, max_length=200, validation_alias=AliasChoices("target", "to"))
     confidence: float = Field(ge=0, le=1)
 
 
@@ -37,7 +47,14 @@ class ExtractionResult(BaseModel):
 
 def parse_extraction(content: str) -> ExtractionResult:
     try:
-        return ExtractionResult.model_validate(json.loads(content))
+        value = content.strip()
+        if value.startswith("```"):
+            lines = value.splitlines()
+            value = "\n".join(lines[1:-1]).strip()
+        start, end = value.find("{"), value.rfind("}")
+        if start < 0 or end < start:
+            raise json.JSONDecodeError("No JSON object", value, 0)
+        return ExtractionResult.model_validate(json.loads(value[start : end + 1]))
     except (json.JSONDecodeError, ValidationError) as exc:
         raise ApplicationError(
             "GRAPH_EXTRACTION_INVALID",
@@ -65,9 +82,9 @@ class GraphExtractionService:
             raise ApplicationError("CHUNK_NOT_FOUND", "Document chunk not found", status_code=404)
         prompt = (
             "Extract entities and factual relations. Return JSON only with entities and "
-            "relations arrays. Every item needs confidence 0..1.\n<context>"
-            + chunk.content
-            + "</context>"
+            "relations arrays. Entity fields: name, entity_type, summary, confidence. "
+            "Relation fields: source, predicate, target, confidence. "
+            "Every item needs confidence 0..1.\n<context>" + chunk.content + "</context>"
         )
         result = parse_extraction(
             await self.chat.complete(
@@ -77,7 +94,8 @@ class GraphExtractionService:
                         "content": "You extract evidence-backed personal knowledge.",
                     },
                     {"role": "user", "content": prompt},
-                ]
+                ],
+                json_mode=True,
             )
         )
         entities: dict[str, KnowledgeEntity] = {}

@@ -11,7 +11,9 @@ class VectorIndexingService:
         self.session = session
         self.embedding_client = embedding_client
 
-    async def index(self, user_id: str, source_id: str) -> int:
+    async def index(
+        self, user_id: str, source_id: str, source_version_id: str | None = None
+    ) -> int:
         source = await self.session.scalar(
             select(KnowledgeSource).where(
                 KnowledgeSource.id == source_id,
@@ -28,6 +30,11 @@ class VectorIndexingService:
                 SourceVersion.source_id == source.id,
                 SourceVersion.user_id == user_id,
                 SourceVersion.status.in_(("PARSED", "INDEXING")),
+                *(
+                    (SourceVersion.id == source_version_id,)
+                    if source_version_id is not None
+                    else ()
+                ),
             )
             .order_by(SourceVersion.created_at.desc())
         )

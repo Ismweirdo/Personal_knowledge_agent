@@ -55,6 +55,24 @@ class DocumentUploadResponse(BaseModel):
     content_hash: str
     chunk_count: int
     unchanged: bool = False
+    task_id: str | None = None
+
+
+class IngestionTaskResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    source_id: str
+    source_version_id: str
+    task_type: str
+    status: str
+    progress: int
+    retry_count: int
+    error_code: str | None
+    error_message: str | None
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
 
 
 class ConversationCreate(BaseModel):

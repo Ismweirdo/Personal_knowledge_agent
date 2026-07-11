@@ -32,3 +32,24 @@ async def test_complete_uses_configured_model() -> None:
 
     assert result == "test response"
     create.assert_awaited_once_with(model="deepseek-chat", messages=messages, stream=False)
+
+
+@pytest.mark.asyncio
+async def test_complete_can_request_json_mode() -> None:
+    create = AsyncMock(
+        return_value=SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content='{"ok":true}'))]
+        )
+    )
+    sdk_client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    client = ChatModelClient(client=sdk_client, model="deepseek-chat")
+    messages = [{"role": "user", "content": "return json"}]
+
+    await client.complete(messages, json_mode=True)
+
+    create.assert_awaited_once_with(
+        model="deepseek-chat",
+        messages=messages,
+        stream=False,
+        response_format={"type": "json_object"},
+    )

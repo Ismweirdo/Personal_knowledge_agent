@@ -37,7 +37,7 @@ async def test_pgvector_migrations_retrieval_and_redis() -> None:
         )
         migration = await session.scalar(text("SELECT version_num FROM alembic_version"))
         assert extension == "vector"
-        assert migration == "20260711_08"
+        assert migration == "20260711_09"
 
         admin = User(email="integration@example.com", password_hash="unused", role="ADMIN")
         session.add(admin)

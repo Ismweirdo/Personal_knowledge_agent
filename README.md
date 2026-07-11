@@ -7,6 +7,7 @@
 ## 当前状态
 
 当前已具备工程基础、DeepSeek 客户端、用户认证和知识库生命周期。后续里程碑将依次实现增量入库、RAG 引用问答、实体关系抽取、学习事件与审核闭环。
+当前已实现自动入库任务：上传或同步完成解析后创建持久化任务，后台 Worker 自动完成 Embedding、活动版本切换和图谱候选抽取。管理员前端轮询任务进度，无需手工触发索引。
 
 开发环境默认通过 OpenAI 兼容协议接入 DeepSeek，默认模型为 `deepseek-chat`。真实 API Key 仅通过本地 `.env` 的 `LLM_API_KEY` 注入，禁止提交到仓库。私人简历、学习笔记、项目源码与上传文件同样不得提交到公开仓库。
 
@@ -24,6 +25,16 @@ uvicorn app.main:app --reload
 ```
 
 访问 `http://localhost:8000/health` 或 `http://localhost:8000/docs`。
+
+开发环境可使用 GitHub Models 的 OpenAI 兼容 Embedding 接口：
+
+```env
+EMBEDDING_BASE_URL=https://models.github.ai/inference
+EMBEDDING_MODEL=openai/text-embedding-3-small
+EMBEDDING_DIMENSIONS=1536
+EMBEDDING_API_KEY=your-fine-grained-token
+BACKGROUND_WORKER_ENABLED=true
+```
 
 ## 测试
 

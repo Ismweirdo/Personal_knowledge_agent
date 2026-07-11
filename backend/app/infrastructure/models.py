@@ -91,6 +91,30 @@ class SourceVersion(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class IngestionTask(Base):
+    __tablename__ = "ingestion_tasks"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    source_id: Mapped[str] = mapped_column(
+        ForeignKey("knowledge_sources.id", ondelete="CASCADE"), index=True
+    )
+    source_version_id: Mapped[str] = mapped_column(
+        ForeignKey("source_versions.id", ondelete="CASCADE"), index=True
+    )
+    task_type: Mapped[str] = mapped_column(String(30), default="INGEST_SOURCE")
+    status: Mapped[str] = mapped_column(String(20), default="PENDING", index=True)
+    progress: Mapped[int] = mapped_column(default=0)
+    retry_count: Mapped[int] = mapped_column(default=0)
+    max_retries: Mapped[int] = mapped_column(default=3)
+    error_code: Mapped[str | None] = mapped_column(String(100))
+    error_message: Mapped[str | None] = mapped_column(String(500))
+    next_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class DocumentChunk(Base):
     __tablename__ = "document_chunks"
     __table_args__ = (UniqueConstraint("source_version_id", "chunk_index", name="uq_chunk_index"),)

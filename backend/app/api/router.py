@@ -8,6 +8,7 @@ from app.conversation.router import router as conversation_router
 from app.infrastructure.health import HealthService, get_health_service
 from app.infrastructure.observability import metrics_response
 from app.ingestion.router import router as ingestion_router
+from app.ingestion.task_router import router as task_router
 from app.knowledge_base.public_router import router as public_agent_router
 from app.knowledge_base.router import router as knowledge_base_router
 from app.knowledge_graph.router import router as knowledge_graph_router
@@ -18,6 +19,7 @@ router.include_router(auth_router)
 router.include_router(knowledge_base_router)
 router.include_router(public_agent_router)
 router.include_router(ingestion_router)
+router.include_router(task_router)
 router.include_router(conversation_router)
 router.include_router(knowledge_graph_router)
 router.include_router(learning_router)

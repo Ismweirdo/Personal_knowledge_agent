@@ -9,8 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.schemas import DocumentUploadResponse
 from app.infrastructure.config import Settings
 from app.infrastructure.errors import ApplicationError
-from app.infrastructure.models import DocumentChunk, KnowledgeSource, SourceVersion
+from app.infrastructure.models import DocumentChunk, IngestionTask, KnowledgeSource, SourceVersion
 from app.ingestion.parser import chunk_pages, parse_document
+from app.ingestion.tasks import enqueue_task
 from app.knowledge_base.service import KnowledgeBaseService
 
 
@@ -86,6 +87,7 @@ class FileIngestionService:
                 ]
             )
             source.status = "PARSED"
+            task = await enqueue_task(self.session, user_id, source.id, version.id)
             await self.session.commit()
             return DocumentUploadResponse(
                 source_id=source.id,
@@ -93,6 +95,7 @@ class FileIngestionService:
                 status=version.status,
                 content_hash=content_hash,
                 chunk_count=len(chunks),
+                task_id=task.id,
             )
         except Exception:
             await self.session.rollback()
@@ -130,6 +133,9 @@ class FileIngestionService:
                 DocumentChunk.source_version_id == version.id
             )
         )
+        task_id = await self.session.scalar(
+            select(IngestionTask.id).where(IngestionTask.source_version_id == version.id)
+        )
         return DocumentUploadResponse(
             source_id=version.source_id,
             version_id=version.id,
@@ -137,6 +143,7 @@ class FileIngestionService:
             content_hash=version.content_hash,
             chunk_count=chunk_count or 0,
             unchanged=unchanged,
+            task_id=task_id,
         )
 
     def _storage_path(self, user_id: str, knowledge_base_id: str, filename: str) -> Path:
