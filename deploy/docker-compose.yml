@@ -2,6 +2,10 @@ services:
   backend:
     build: ../backend
     env_file: ../.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/knowledge_agent
+      REDIS_HOST: redis
+      FILE_STORAGE_PATH: /app/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -10,12 +14,22 @@ services:
     volumes:
       - uploads:/app/uploads
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
 
   frontend:
     build: ../frontend
     depends_on:
       - backend
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
 
   postgres:
     image: pgvector/pgvector:pg16
