@@ -5,13 +5,14 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from app.infrastructure.config import Settings, get_settings
 from app.infrastructure.database import get_session
 from app.infrastructure.models import Base
 from app.main import create_app
 
 
 @pytest_asyncio.fixture
-async def client() -> AsyncIterator[AsyncClient]:
+async def client(tmp_path) -> AsyncIterator[AsyncClient]:
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     async with engine.begin() as connection:
@@ -23,6 +24,11 @@ async def client() -> AsyncIterator[AsyncClient]:
 
     app = create_app()
     app.dependency_overrides[get_session] = override_session
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        jwt_secret="test-secret-that-is-long-enough",
+        file_storage_path=str(tmp_path / "uploads"),
+        _env_file=None,
+    )
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as value:
         yield value
     await engine.dispose()
@@ -92,3 +98,66 @@ async def test_knowledge_base_crud_and_user_isolation(client: AsyncClient) -> No
         f"/api/v1/knowledge-bases/{knowledge_base_id}", headers=first_headers
     )
     assert deleted.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_document_upload_is_idempotent_and_user_isolated(client: AsyncClient) -> None:
+    owner_token = await register(client, "owner@example.com")
+    other_token = await register(client, "other@example.com")
+    owner_headers = {"Authorization": f"Bearer {owner_token}"}
+    other_headers = {"Authorization": f"Bearer {other_token}"}
+    knowledge_base = await client.post(
+        "/api/v1/knowledge-bases",
+        headers=owner_headers,
+        json={"name": "Learning"},
+    )
+    knowledge_base_id = knowledge_base.json()["id"]
+    document = (
+        "notes.md",
+        b"FastAPI uses async Python.\nPostgreSQL stores knowledge.",
+        "text/markdown",
+    )
+
+    first = await client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents",
+        headers=owner_headers,
+        files={"file": document},
+    )
+    assert first.status_code == 201
+    assert first.json()["chunk_count"] == 1
+    assert first.json()["unchanged"] is False
+
+    repeated = await client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents",
+        headers=owner_headers,
+        files={"file": document},
+    )
+    assert repeated.status_code == 201
+    assert repeated.json()["version_id"] == first.json()["version_id"]
+    assert repeated.json()["unchanged"] is True
+
+    isolated = await client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents",
+        headers=other_headers,
+        files={"file": document},
+    )
+    assert isolated.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_failed_upload_does_not_leave_stored_file(client: AsyncClient, tmp_path) -> None:
+    token = await register(client, "cleanup@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+    knowledge_base = await client.post(
+        "/api/v1/knowledge-bases", headers=headers, json={"name": "Cleanup"}
+    )
+
+    response = await client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base.json()['id']}/documents",
+        headers=headers,
+        files={"file": ("unsafe.env", b"SECRET=value", "text/plain")},
+    )
+
+    assert response.status_code == 415
+    upload_root = tmp_path / "uploads"
+    assert not upload_root.exists() or not any(upload_root.rglob("*.*"))

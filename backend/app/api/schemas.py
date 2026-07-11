@@ -37,3 +37,12 @@ class KnowledgeBaseResponse(BaseModel):
     embedding_model: str | None
     created_at: datetime
     updated_at: datetime
+
+
+class DocumentUploadResponse(BaseModel):
+    source_id: str
+    version_id: str
+    status: str
+    content_hash: str
+    chunk_count: int
+    unchanged: bool = False
