@@ -30,8 +30,7 @@ const tab = ref("knowledge"),
   gitPath = ref(""),
   candidates = ref({ entities: [], relations: [] }),
   reviews = ref([]),
-  notice = ref(""),
-  lastSource = ref("");
+  notice = ref("");
 const isAdmin = computed(() => user.value?.role === "ADMIN");
 async function loadUser() {
   if (!token.get()) return;
@@ -103,8 +102,8 @@ async function uploadFile(e) {
     method: "POST",
     body,
   });
-  lastSource.value = result.source_id;
-  notice.value = `Parsed ${result.chunk_count} chunks`;
+  notice.value = `Parsed ${result.chunk_count} chunks; task queued`;
+  if (result.task_id) trackTask(result.task_id);
   e.target.value = "";
 }
 async function syncSource(type) {
@@ -114,17 +113,26 @@ async function syncSource(type) {
     `/knowledge-bases/${selectedKb.value}/sources:${type}`,
     { method: "POST", body: JSON.stringify(payload) },
   );
-  lastSource.value = result.source_id;
   notice.value = result.unchanged
     ? "Source unchanged"
-    : `Created ${result.chunk_count} chunks`;
+    : `Created ${result.chunk_count} chunks; task queued`;
+  if (result.task_id) trackTask(result.task_id);
 }
-async function indexSource() {
-  const result = await api(`/sources/${lastSource.value}/index`, {
-    method: "POST",
-  });
-  notice.value = `Indexed ${result.indexedChunks} chunks`;
-  lastSource.value = "";
+async function trackTask(taskId) {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const task = await api(`/admin/tasks/${taskId}`);
+    notice.value = `Ingestion ${task.status.toLowerCase()} · ${task.progress}%`;
+    if (task.status === "SUCCEEDED") {
+      await loadAdmin();
+      return;
+    }
+    if (task.status === "FAILED") {
+      notice.value = `Ingestion failed: ${task.error_message || task.error_code}`;
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+  }
+  notice.value = "Ingestion is still running. Check the task list later.";
 }
 async function review(type, id, action) {
   await api(`/knowledge-candidates/${type}/${id}:${action}`, {
@@ -320,7 +328,6 @@ onMounted(loadUser);
         </div>
         <p v-if="notice" class="notice">
           {{ notice }}
-          <button v-if="lastSource" @click="indexSource">Build index</button>
         </p>
         <section class="table-section">
           <h3>Knowledge candidates</h3>

@@ -6,7 +6,7 @@
 
 ## 当前状态
 
-当前已具备工程基础、DeepSeek 客户端、用户认证和知识库生命周期。后续里程碑将依次实现增量入库、RAG 引用问答、实体关系抽取、学习事件与审核闭环。
+当前已具备管理员/访客双端、文件/网页/Git 增量同步、持久化后台任务、GitHub Models Embedding、pgvector 检索、DeepSeek SSE 问答、证据化知识图谱、候选审核、学习复习、CI、可观测与部署基础。上传或同步完成解析后创建任务，Worker 自动完成 Embedding、活动版本切换和图谱候选抽取，管理员前端轮询进度。
 
 开发环境默认通过 OpenAI 兼容协议接入 DeepSeek，默认模型为 `deepseek-chat`。真实 API Key 仅通过本地 `.env` 的 `LLM_API_KEY` 注入，禁止提交到仓库。私人简历、学习笔记、项目源码与上传文件同样不得提交到公开仓库。
 
@@ -24,6 +24,16 @@ uvicorn app.main:app --reload
 ```
 
 访问 `http://localhost:8000/health` 或 `http://localhost:8000/docs`。
+
+开发环境可使用 GitHub Models 的 OpenAI 兼容 Embedding 接口：
+
+```env
+EMBEDDING_BASE_URL=https://models.github.ai/inference
+EMBEDDING_MODEL=openai/text-embedding-3-small
+EMBEDDING_DIMENSIONS=1536
+EMBEDDING_API_KEY=your-fine-grained-token
+BACKGROUND_WORKER_ENABLED=true
+```
 
 ## 测试
 
@@ -52,4 +62,13 @@ python -m app.infrastructure.bootstrap_admin your-email@example.com
 docker compose -f deploy/docker-compose.yml up --build
 ```
 
-应用通过 `http://localhost:8080` 访问。详细方案见 [项目设计文档](docs/项目1设计文档.md) 和 [技术文档](docs/项目1技术文档.md)。
+应用通过 `http://localhost:8080` 访问。
+
+## 文档
+
+- [项目设计文档](docs/项目1设计文档.md)：产品边界、架构、数据模型和里程碑。
+- [项目技术文档](docs/项目1技术文档.md)：工程结构、API、入库、RAG、安全、测试与部署。
+- [开发文档](docs/开发文档.md)：开发过程中遇到的问题、根因、解决方法、选择理由和剩余风险。
+- [持续学习与知识图谱设计](docs/持续学习与知识图谱设计.md)：证据、审核、冲突和学习闭环。
+- [验证与评测说明](docs/验证与评测说明.md)：自动化、真实依赖、效果评测和压测边界。
+- [上线运行手册](docs/上线运行手册.md)：生产配置、健康检查、备份恢复和故障处理。

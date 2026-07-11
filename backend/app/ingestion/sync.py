@@ -10,8 +10,9 @@ from app.api.schemas import DocumentUploadResponse
 from app.connectors.git import snapshot_repository
 from app.connectors.web import fetch_web, validate_public_url
 from app.infrastructure.config import Settings
-from app.infrastructure.models import DocumentChunk, KnowledgeSource, SourceVersion
+from app.infrastructure.models import DocumentChunk, IngestionTask, KnowledgeSource, SourceVersion
 from app.ingestion.parser import ParsedPage, chunk_pages
+from app.ingestion.tasks import enqueue_task
 from app.knowledge_base.service import KnowledgeBaseService
 
 
@@ -131,6 +132,7 @@ class SourceSyncService:
                 for index, chunk in enumerate(chunks)
             )
             source.status = "PARSED"
+            task = await enqueue_task(self.session, user_id, source.id, version.id)
             await self.session.commit()
             return DocumentUploadResponse(
                 source_id=source.id,
@@ -138,6 +140,7 @@ class SourceSyncService:
                 status=version.status,
                 content_hash=content_hash,
                 chunk_count=len(chunks),
+                task_id=task.id,
             )
         except Exception:
             await self.session.rollback()
@@ -171,6 +174,9 @@ class SourceSyncService:
                 DocumentChunk.source_version_id == version.id
             )
         )
+        task_id = await self.session.scalar(
+            select(IngestionTask.id).where(IngestionTask.source_version_id == version.id)
+        )
         return DocumentUploadResponse(
             source_id=version.source_id,
             version_id=version.id,
@@ -178,4 +184,5 @@ class SourceSyncService:
             content_hash=version.content_hash,
             chunk_count=count or 0,
             unchanged=unchanged,
+            task_id=task_id,
         )

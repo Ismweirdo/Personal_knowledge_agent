@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     web_crawl_user_agent: str = "PersonalKnowledgeAgent/0.1"
     sync_interval_minutes: int = 30
     git_import_root: str | None = None
+    background_worker_enabled: bool = False
+    background_worker_poll_seconds: float = 2.0
+    background_task_stale_seconds: int = 300
 
     model_config = SettingsConfigDict(env_file=("../.env", ".env"), extra="ignore")
 

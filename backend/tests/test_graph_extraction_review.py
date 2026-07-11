@@ -28,6 +28,21 @@ def test_parse_structured_graph_candidates() -> None:
     assert result.entities[0].confidence == 0.95
 
 
+def test_parse_markdown_fenced_graph_candidates() -> None:
+    result = parse_extraction('```json\n{"entities":[],"relations":[]}\n```')
+    assert result.entities == []
+
+
+def test_parse_deepseek_field_aliases() -> None:
+    result = parse_extraction(
+        '{"entities":[{"name":"FastAPI","type":"TECH","confidence":0.9}],'
+        '"relations":[{"from":"FastAPI","type":"USES","to":"Python",'
+        '"confidence":0.8}]}'
+    )
+    assert result.entities[0].entity_type == "TECH"
+    assert result.relations[0].predicate == "USES"
+
+
 @pytest.mark.parametrize(
     "payload",
     ["not-json", '{"entities":[{"name":"","entity_type":"TECH","confidence":2}]}'],
@@ -41,7 +56,7 @@ def test_invalid_graph_candidates_are_rejected(payload: str) -> None:
 class FakeChat:
     model = "fake-deepseek"
 
-    async def complete(self, messages) -> str:
+    async def complete(self, messages, **kwargs) -> str:
         return (
             '{"entities":['
             '{"name":"FastAPI","entity_type":"technology","confidence":0.9},'

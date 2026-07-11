@@ -31,13 +31,17 @@ class ChatModelClient:
             model=settings.chat_model,
         )
 
-    async def complete(self, messages: Sequence[ChatCompletionMessageParam]) -> str:
+    async def complete(
+        self,
+        messages: Sequence[ChatCompletionMessageParam],
+        *,
+        json_mode: bool = False,
+    ) -> str:
         try:
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                stream=False,
-            )
+            arguments = {"model": self.model, "messages": messages, "stream": False}
+            if json_mode:
+                arguments["response_format"] = {"type": "json_object"}
+            response = await self.client.chat.completions.create(**arguments)
         except RateLimitError as exc:
             raise ApplicationError(
                 "LLM_RATE_LIMITED",
