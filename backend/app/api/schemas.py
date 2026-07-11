@@ -63,3 +63,7 @@ class ConversationResponse(BaseModel):
 
 class ChatRequest(BaseModel):
     content: str = Field(min_length=1, max_length=8000)
+
+
+class KnowledgeReviewRequest(BaseModel):
+    reason: str | None = Field(default=None, max_length=1000)
