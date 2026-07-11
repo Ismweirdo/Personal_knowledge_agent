@@ -79,6 +79,11 @@ async def test_register_login_and_duplicate_email(client: AsyncClient) -> None:
         json={"email": "USER@example.com", "password": "secure-password"},
     )
     assert login.status_code == 200
+    me = await client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {login.json()['access_token']}"},
+    )
+    assert me.json()["role"] == "USER"
 
     duplicate = await client.post(
         "/api/v1/auth/register",
