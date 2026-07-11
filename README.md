@@ -26,7 +26,10 @@ uvicorn app.main:app --reload
 ```bash
 cd backend
 pytest
+ruff check .
 ```
+
+所有后续功能从 `main` 创建独立分支，经测试、Pull Request 和 Review 后合并。
 
 ## Docker Compose
 
