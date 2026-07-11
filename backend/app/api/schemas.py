@@ -70,3 +70,7 @@ class ChatRequest(BaseModel):
 
 class KnowledgeReviewRequest(BaseModel):
     reason: str | None = Field(default=None, max_length=1000)
+
+
+class ReviewGradeRequest(BaseModel):
+    grade: int = Field(ge=0, le=5)
