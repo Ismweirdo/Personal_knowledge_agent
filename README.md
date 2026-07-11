@@ -1,12 +1,12 @@
-# Personal Knowledge Agent
+# Personal Learning Knowledge Agent
 
-基于 FastAPI 的个人知识库问答 Agent。项目采用模块化单体结构，规划支持文档同步、RAG 检索、带引用的流式问答和离线评测。
+基于 FastAPI 的持续学习型个人知识库与知识图谱 Agent。系统从文档、网页、项目和学习记录中增量吸收内容，同时维护可追溯的原文知识库和结构化知识图谱，用于问答、关联发现、知识缺口分析和复习规划。
 
 ## 当前状态
 
-当前仓库提供 M1 工程骨架：应用启动、配置加载、统一错误结构、健康检查、测试和 Docker Compose 基础设施。知识库、入库、检索和 Agent 等目录已按设计文档划分，业务能力将在后续里程碑实现。
+当前已具备工程基础、DeepSeek 客户端、用户认证和知识库生命周期。后续里程碑将依次实现增量入库、RAG 引用问答、实体关系抽取、学习事件与审核闭环。
 
-开发环境默认通过 OpenAI 兼容协议接入 DeepSeek，默认模型为 `deepseek-chat`。真实 API Key 仅通过本地 `.env` 的 `LLM_API_KEY` 注入，禁止提交到仓库。
+开发环境默认通过 OpenAI 兼容协议接入 DeepSeek，默认模型为 `deepseek-chat`。真实 API Key 仅通过本地 `.env` 的 `LLM_API_KEY` 注入，禁止提交到仓库。私人简历、学习笔记、项目源码与上传文件同样不得提交到公开仓库。
 
 ## 本地启动
 
