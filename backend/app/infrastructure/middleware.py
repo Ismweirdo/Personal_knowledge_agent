@@ -14,4 +14,3 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         response.headers[REQUEST_ID_HEADER] = request_id
         return response
-

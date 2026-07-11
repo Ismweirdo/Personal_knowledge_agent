@@ -23,4 +23,3 @@ class HealthService:
 def get_health_service() -> HealthService:
     # Concrete database and Redis probes are wired when their clients are introduced.
     return HealthService()
-
