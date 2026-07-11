@@ -218,6 +218,26 @@ class LearningEvent(Base):
     )
 
 
+class ReviewTask(Base):
+    __tablename__ = "review_tasks"
+    __table_args__ = (UniqueConstraint("user_id", "entity_id", name="uq_review_user_entity"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    entity_id: Mapped[str] = mapped_column(
+        ForeignKey("knowledge_entities.id", ondelete="CASCADE"), index=True
+    )
+    repetitions: Mapped[int] = mapped_column(default=0)
+    interval_days: Mapped[int] = mapped_column(default=0)
+    ease_factor: Mapped[float] = mapped_column(Float, default=2.5)
+    mastery: Mapped[float] = mapped_column(Float, default=0.0)
+    due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    status: Mapped[str] = mapped_column(String(20), default="PENDING", index=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class Conversation(Base):
     __tablename__ = "conversations"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))

@@ -9,6 +9,7 @@ from app.infrastructure.llm import ChatModelClient, get_chat_model_client
 from app.infrastructure.models import KnowledgeEntity, KnowledgeRelation
 from app.knowledge_graph.extraction import GraphExtractionService
 from app.knowledge_graph.review import KnowledgeReviewService
+from app.learning.service import ReviewService
 
 router = APIRouter(tags=["knowledge-graph"])
 Chat = Annotated[ChatModelClient, Depends(get_chat_model_client)]
@@ -81,6 +82,9 @@ async def review_candidate(
         result = await service.review_entity(
             user_id, candidate_id, accept=accept, reason=payload.reason
         )
+        if accept:
+            await ReviewService(session).ensure_task(user_id, result.id)
+            await session.commit()
     else:
         result = await service.review_relation(
             user_id, candidate_id, accept=accept, reason=payload.reason
