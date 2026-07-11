@@ -65,7 +65,7 @@ class FileIngestionService:
                 storage_key=str(storage_path),
                 mime_type=upload.content_type or "application/octet-stream",
                 size_bytes=len(content),
-                status="READY",
+                status="PARSED",
             )
             self.session.add(version)
             await self.session.flush()
@@ -85,8 +85,7 @@ class FileIngestionService:
                     for index, chunk in enumerate(chunks)
                 ]
             )
-            source.active_version_id = version.id
-            source.status = "READY"
+            source.status = "PARSED"
             await self.session.commit()
             return DocumentUploadResponse(
                 source_id=source.id,
@@ -121,7 +120,7 @@ class FileIngestionService:
             select(SourceVersion).where(
                 SourceVersion.source_id == source.id,
                 SourceVersion.content_hash == content_hash,
-                SourceVersion.status == "READY",
+                SourceVersion.status.in_(("PARSED", "INDEXING", "READY")),
             )
         )
 

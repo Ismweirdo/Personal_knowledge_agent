@@ -7,8 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.infrastructure.config import Settings, get_settings
 from app.infrastructure.database import get_session
+from app.infrastructure.embedding import get_embedding_client
 from app.infrastructure.models import Base
 from app.main import create_app
+
+
+class FakeEmbeddingClient:
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        return [[0.0] * 1536 for _ in texts]
 
 
 @pytest_asyncio.fixture
@@ -29,6 +35,7 @@ async def client(tmp_path) -> AsyncIterator[AsyncClient]:
         file_storage_path=str(tmp_path / "uploads"),
         _env_file=None,
     )
+    app.dependency_overrides[get_embedding_client] = lambda: FakeEmbeddingClient()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as value:
         yield value
     await engine.dispose()
@@ -126,6 +133,7 @@ async def test_document_upload_is_idempotent_and_user_isolated(client: AsyncClie
     assert first.status_code == 201
     assert first.json()["chunk_count"] == 1
     assert first.json()["unchanged"] is False
+    assert first.json()["status"] == "PARSED"
 
     repeated = await client.post(
         f"/api/v1/knowledge-bases/{knowledge_base_id}/documents",
@@ -142,6 +150,14 @@ async def test_document_upload_is_idempotent_and_user_isolated(client: AsyncClie
         files={"file": document},
     )
     assert isolated.status_code == 404
+
+    indexed = await client.post(
+        f"/api/v1/sources/{first.json()['source_id']}/index",
+        headers=owner_headers,
+    )
+    assert indexed.status_code == 200
+    assert indexed.json()["indexedChunks"] == 1
+    assert indexed.json()["status"] == "READY"
 
 
 @pytest.mark.asyncio

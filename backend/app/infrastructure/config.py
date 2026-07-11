@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     llm_base_url: str = "https://api.deepseek.com"
     chat_model: str = "deepseek-chat"
     embedding_model: str | None = None
+    embedding_api_key: str | None = None
+    embedding_base_url: str | None = None
+    embedding_dimensions: int = 1536
     file_storage_path: str = "uploads"
     max_upload_bytes: int = 20 * 1024 * 1024
     web_crawl_user_agent: str = "PersonalKnowledgeAgent/0.1"
