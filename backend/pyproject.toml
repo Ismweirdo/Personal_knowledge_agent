@@ -41,6 +41,7 @@ packages = ["app"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = ["integration: requires PostgreSQL/pgvector and Redis"]
 
 [tool.ruff]
 target-version = "py312"
