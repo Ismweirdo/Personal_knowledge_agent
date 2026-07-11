@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     chat_model: str = "deepseek-chat"
     embedding_model: str | None = None
     file_storage_path: str = "uploads"
+    max_upload_bytes: int = 20 * 1024 * 1024
     web_crawl_user_agent: str = "PersonalKnowledgeAgent/0.1"
     sync_interval_minutes: int = 30
 
