@@ -27,6 +27,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     status: Mapped[str] = mapped_column(String(20), default="ACTIVE")
+    role: Mapped[str] = mapped_column(String(20), default="USER", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     knowledge_bases: Mapped[list["KnowledgeBase"]] = relationship(
         back_populates="owner", cascade="all, delete-orphan"
@@ -42,6 +43,7 @@ class KnowledgeBase(Base):
     name: Mapped[str] = mapped_column(String(100))
     description: Mapped[str | None] = mapped_column(Text)
     embedding_model: Mapped[str | None] = mapped_column(String(100))
+    is_published: Mapped[bool] = mapped_column(default=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

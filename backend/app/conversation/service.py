@@ -7,8 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.errors import ApplicationError
 from app.infrastructure.llm import ChatModelClient
-from app.infrastructure.models import Conversation, Message, MessageCitation
-from app.knowledge_base.service import KnowledgeBaseService
+from app.infrastructure.models import Conversation, KnowledgeBase, Message, MessageCitation
 from app.retrieval.service import RetrievalResult, RetrievalService
 
 SYSTEM_PROMPT = """Answer only from the supplied context. If evidence is insufficient, say so.
@@ -29,7 +28,14 @@ class RagConversationService:
         self.chat = chat
 
     async def create(self, user_id: str, kb_id: str, title: str) -> Conversation:
-        await KnowledgeBaseService(self.session).get(user_id, kb_id)
+        knowledge_base = await self.session.scalar(
+            select(KnowledgeBase).where(
+                KnowledgeBase.id == kb_id,
+                KnowledgeBase.is_published.is_(True),
+            )
+        )
+        if knowledge_base is None:
+            raise ApplicationError("AGENT_NOT_AVAILABLE", "Agent is not available", status_code=404)
         conversation = Conversation(user_id=user_id, kb_id=kb_id, title=title)
         self.session.add(conversation)
         await self.session.commit()
@@ -51,7 +57,19 @@ class RagConversationService:
         started = monotonic()
         answer: list[str] = []
         try:
-            results = await self.retrieval.search(user_id, conversation.kb_id, question, limit=6)
+            knowledge_owner_id = await self.session.scalar(
+                select(KnowledgeBase.user_id).where(
+                    KnowledgeBase.id == conversation.kb_id,
+                    KnowledgeBase.is_published.is_(True),
+                )
+            )
+            if knowledge_owner_id is None:
+                raise ApplicationError(
+                    "AGENT_NOT_AVAILABLE", "Agent is not available", status_code=404
+                )
+            results = await self.retrieval.search(
+                knowledge_owner_id, conversation.kb_id, question, limit=6
+            )
             self.session.add_all(
                 [
                     MessageCitation(

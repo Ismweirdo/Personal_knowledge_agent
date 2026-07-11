@@ -19,7 +19,7 @@ class AuthService:
         self.settings = settings
 
     async def register(self, email: str, password: str) -> str:
-        user = User(email=email.lower(), password_hash=password_hash.hash(password))
+        user = User(email=email.lower(), password_hash=password_hash.hash(password), role="USER")
         self.session.add(user)
         try:
             await self.session.commit()

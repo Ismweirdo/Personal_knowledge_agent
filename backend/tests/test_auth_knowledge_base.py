@@ -8,7 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.infrastructure.config import Settings, get_settings
 from app.infrastructure.database import get_session
 from app.infrastructure.embedding import get_embedding_client
-from app.infrastructure.models import Base
+from app.infrastructure.models import Base, User
+from app.infrastructure.security import password_hash
 from app.main import create_app
 
 
@@ -23,6 +24,15 @@ async def client(tmp_path) -> AsyncIterator[AsyncClient]:
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
+    async with session_factory() as seed_session:
+        seed_session.add(
+            User(
+                email="admin@example.com",
+                password_hash=password_hash.hash("secure-password"),
+                role="ADMIN",
+            )
+        )
+        await seed_session.commit()
 
     async def override_session() -> AsyncIterator[AsyncSession]:
         async with session_factory() as session:
@@ -47,6 +57,15 @@ async def register(client: AsyncClient, email: str) -> str:
         json={"email": email, "password": "secure-password"},
     )
     assert response.status_code == 201
+    return response.json()["access_token"]
+
+
+async def admin_token(client: AsyncClient) -> str:
+    response = await client.post(
+        "/api/v1/auth/login",
+        json={"email": "admin@example.com", "password": "secure-password"},
+    )
+    assert response.status_code == 200
     return response.json()["access_token"]
 
 
@@ -78,7 +97,7 @@ async def test_knowledge_bases_require_authentication(client: AsyncClient) -> No
 
 @pytest.mark.asyncio
 async def test_knowledge_base_crud_and_user_isolation(client: AsyncClient) -> None:
-    first_token = await register(client, "first@example.com")
+    first_token = await admin_token(client)
     second_token = await register(client, "second@example.com")
     first_headers = {"Authorization": f"Bearer {first_token}"}
     second_headers = {"Authorization": f"Bearer {second_token}"}
@@ -86,10 +105,14 @@ async def test_knowledge_base_crud_and_user_isolation(client: AsyncClient) -> No
     created = await client.post(
         "/api/v1/knowledge-bases",
         headers=first_headers,
-        json={"name": "Notes", "description": "Personal notes"},
+        json={"name": "Notes", "description": "Personal notes", "is_published": True},
     )
     assert created.status_code == 201
     knowledge_base_id = created.json()["id"]
+
+    public_agent = await client.get("/api/v1/agent")
+    assert public_agent.status_code == 200
+    assert public_agent.json()["knowledgeBaseId"] == knowledge_base_id
 
     listed = await client.get("/api/v1/knowledge-bases", headers=first_headers)
     assert [item["id"] for item in listed.json()] == [knowledge_base_id]
@@ -99,7 +122,15 @@ async def test_knowledge_base_crud_and_user_isolation(client: AsyncClient) -> No
         headers=second_headers,
         json={"name": "Stolen"},
     )
-    assert forbidden_as_not_found.status_code == 404
+    assert forbidden_as_not_found.status_code == 403
+    assert forbidden_as_not_found.json()["code"] == "ADMIN_REQUIRED"
+
+    user_create = await client.post(
+        "/api/v1/knowledge-bases",
+        headers=second_headers,
+        json={"name": "User agent"},
+    )
+    assert user_create.status_code == 403
 
     deleted = await client.delete(
         f"/api/v1/knowledge-bases/{knowledge_base_id}", headers=first_headers
@@ -109,7 +140,7 @@ async def test_knowledge_base_crud_and_user_isolation(client: AsyncClient) -> No
 
 @pytest.mark.asyncio
 async def test_document_upload_is_idempotent_and_user_isolated(client: AsyncClient) -> None:
-    owner_token = await register(client, "owner@example.com")
+    owner_token = await admin_token(client)
     other_token = await register(client, "other@example.com")
     owner_headers = {"Authorization": f"Bearer {owner_token}"}
     other_headers = {"Authorization": f"Bearer {other_token}"}
@@ -149,7 +180,8 @@ async def test_document_upload_is_idempotent_and_user_isolated(client: AsyncClie
         headers=other_headers,
         files={"file": document},
     )
-    assert isolated.status_code == 404
+    assert isolated.status_code == 403
+    assert isolated.json()["code"] == "ADMIN_REQUIRED"
 
     indexed = await client.post(
         f"/api/v1/sources/{first.json()['source_id']}/index",
@@ -162,7 +194,7 @@ async def test_document_upload_is_idempotent_and_user_isolated(client: AsyncClie
 
 @pytest.mark.asyncio
 async def test_failed_upload_does_not_leave_stored_file(client: AsyncClient, tmp_path) -> None:
-    token = await register(client, "cleanup@example.com")
+    token = await admin_token(client)
     headers = {"Authorization": f"Bearer {token}"}
     knowledge_base = await client.post(
         "/api/v1/knowledge-bases", headers=headers, json={"name": "Cleanup"}

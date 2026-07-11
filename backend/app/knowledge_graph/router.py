@@ -3,7 +3,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 
-from app.api.dependencies import CurrentUserId, Session
+from app.api.dependencies import AdminUserId, Session
 from app.api.schemas import KnowledgeReviewRequest
 from app.infrastructure.llm import ChatModelClient, get_chat_model_client
 from app.infrastructure.models import KnowledgeEntity, KnowledgeRelation
@@ -16,14 +16,14 @@ Chat = Annotated[ChatModelClient, Depends(get_chat_model_client)]
 
 @router.post("/chunks/{chunk_id}/knowledge:extract")
 async def extract_chunk(
-    chunk_id: str, session: Session, user_id: CurrentUserId, chat: Chat
+    chunk_id: str, session: Session, user_id: AdminUserId, chat: Chat
 ) -> dict[str, int]:
     return await GraphExtractionService(session, chat).extract_chunk(user_id, chunk_id)
 
 
 @router.get("/knowledge-bases/{kb_id}/knowledge-candidates")
 async def list_candidates(
-    kb_id: str, session: Session, user_id: CurrentUserId
+    kb_id: str, session: Session, user_id: AdminUserId
 ) -> dict[str, list[dict[str, object]]]:
     entities = list(
         await session.scalars(
@@ -73,7 +73,7 @@ async def review_candidate(
     action: Literal["accept", "reject"],
     payload: KnowledgeReviewRequest,
     session: Session,
-    user_id: CurrentUserId,
+    user_id: AdminUserId,
 ) -> dict[str, str]:
     service = KnowledgeReviewService(session)
     accept = action == "accept"
