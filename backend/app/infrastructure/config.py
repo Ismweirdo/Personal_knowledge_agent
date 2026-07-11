@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/knowledge_agent"
     redis_host: str = "localhost"
     redis_password: str | None = None
+    rate_limit_enabled: bool = False
     jwt_secret: str = "development-only-change-me"
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 30
@@ -30,8 +31,16 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_production_secrets(self) -> "Settings":
-        if self.app_env.lower() == "production" and self.jwt_secret == "development-only-change-me":
+        if self.app_env.lower() != "production":
+            return self
+        if self.jwt_secret == "development-only-change-me":
             raise ValueError("JWT_SECRET must be replaced in production")
+        if not self.llm_api_key:
+            raise ValueError("LLM_API_KEY is required in production")
+        if not self.embedding_api_key or not self.embedding_model:
+            raise ValueError("Embedding provider is required in production")
+        if not self.rate_limit_enabled:
+            raise ValueError("RATE_LIMIT_ENABLED must be true in production")
         return self
 
 

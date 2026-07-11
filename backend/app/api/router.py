@@ -1,10 +1,12 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response, status
+from fastapi.responses import JSONResponse
 
 from app.api.auth import router as auth_router
 from app.conversation.router import router as conversation_router
 from app.infrastructure.health import HealthService, get_health_service
+from app.infrastructure.observability import metrics_response
 from app.ingestion.router import router as ingestion_router
 from app.knowledge_base.public_router import router as public_agent_router
 from app.knowledge_base.router import router as knowledge_base_router
@@ -31,9 +33,19 @@ async def health() -> dict[str, str]:
 @operations_router.get("/health/ready")
 async def readiness(
     health_service: Annotated[HealthService, Depends(get_health_service)],
-) -> dict[str, object]:
+) -> Response:
     checks = await health_service.check_dependencies()
-    return {"status": "ready", "checks": checks}
+    if any(value != "up" for value in checks.values()):
+        return JSONResponse(
+            content={"status": "not_ready", "checks": checks},
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+    return JSONResponse(content={"status": "ready", "checks": checks})
+
+
+@operations_router.get("/metrics", include_in_schema=False)
+async def metrics():
+    return metrics_response()
 
 
 api_router = APIRouter()

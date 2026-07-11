@@ -10,7 +10,7 @@ import {
   RefreshCw,
   Send,
   ShieldCheck,
-} from "lucide-vue-next";
+} from "@lucide/vue";
 import { api, stream, token } from "./api";
 const user = ref(null),
   mode = ref("login"),
