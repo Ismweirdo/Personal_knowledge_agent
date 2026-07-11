@@ -2,9 +2,13 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
+from app.api.auth import router as auth_router
 from app.infrastructure.health import HealthService, get_health_service
+from app.knowledge_base.router import router as knowledge_base_router
 
 router = APIRouter(prefix="/api/v1")
+router.include_router(auth_router)
+router.include_router(knowledge_base_router)
 operations_router = APIRouter(tags=["operations"])
 
 

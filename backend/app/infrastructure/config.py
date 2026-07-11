@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     redis_host: str = "localhost"
     redis_password: str | None = None
     jwt_secret: str = "development-only-change-me"
+    jwt_algorithm: str = "HS256"
+    jwt_expire_minutes: int = 30
     llm_api_key: str | None = None
     llm_base_url: str = "https://api.deepseek.com"
     chat_model: str = "deepseek-chat"
