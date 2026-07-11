@@ -1,0 +1,12 @@
+{"id":"architecture","question":"项目采用什么后端架构？","answerable":true,"expected_terms":["FastAPI","模块化单体"]}
+{"id":"database","question":"项目使用什么数据库和向量扩展？","answerable":true,"expected_terms":["PostgreSQL","pgvector"]}
+{"id":"chat-model","question":"开发环境接入了什么对话模型？","answerable":true,"expected_terms":["DeepSeek"]}
+{"id":"streaming","question":"问答如何向访客流式输出？","answerable":true,"expected_terms":["SSE"]}
+{"id":"provenance","question":"知识图谱如何保证事实可追溯？","answerable":true,"expected_terms":["证据","Chunk"]}
+{"id":"roles","question":"管理员和普通用户有什么区别？","answerable":true,"expected_terms":["管理员","普通用户"]}
+{"id":"sync","question":"网页来源如何判断没有变化？","answerable":true,"expected_terms":["ETag","Last-Modified"]}
+{"id":"git","question":"Git 项目如何做增量同步？","answerable":true,"expected_terms":["commit SHA"]}
+{"id":"review","question":"知识复习任务使用什么调度思路？","answerable":true,"expected_terms":["SM-2"]}
+{"id":"security","question":"私有资料和密钥是否可以提交到公开仓库？","answerable":true,"expected_terms":["禁止"]}
+{"id":"unknown-weather","question":"明天上海的天气如何？","answerable":false,"expected_terms":[]}
+{"id":"unknown-stock","question":"今天某只股票会涨多少？","answerable":false,"expected_terms":[]}
