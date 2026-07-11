@@ -74,3 +74,11 @@ class KnowledgeReviewRequest(BaseModel):
 
 class ReviewGradeRequest(BaseModel):
     grade: int = Field(ge=0, le=5)
+
+
+class WebSourceRequest(BaseModel):
+    url: str = Field(min_length=8, max_length=2000)
+
+
+class GitSourceRequest(BaseModel):
+    repository_path: str = Field(min_length=1, max_length=2000)

@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     max_upload_bytes: int = 20 * 1024 * 1024
     web_crawl_user_agent: str = "PersonalKnowledgeAgent/0.1"
     sync_interval_minutes: int = 30
+    git_import_root: str | None = None
 
     model_config = SettingsConfigDict(env_file=("../.env", ".env"), extra="ignore")
 

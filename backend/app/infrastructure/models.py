@@ -61,6 +61,7 @@ class KnowledgeSource(Base):
     )
     source_type: Mapped[str] = mapped_column(String(20))
     display_name: Mapped[str] = mapped_column(String(255))
+    source_locator: Mapped[str | None] = mapped_column(String(1000), index=True)
     active_version_id: Mapped[str | None] = mapped_column(String(36), index=True)
     status: Mapped[str] = mapped_column(String(20), default="READY", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -84,6 +85,9 @@ class SourceVersion(Base):
     size_bytes: Mapped[int] = mapped_column()
     status: Mapped[str] = mapped_column(String(20), default="PROCESSING", index=True)
     error_message: Mapped[str | None] = mapped_column(String(500))
+    etag: Mapped[str | None] = mapped_column(String(500))
+    last_modified: Mapped[str | None] = mapped_column(String(200))
+    revision: Mapped[str | None] = mapped_column(String(100))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
