@@ -32,6 +32,14 @@ const tab = ref("knowledge"),
   reviews = ref([]),
   notice = ref("");
 const isAdmin = computed(() => user.value?.role === "ADMIN");
+const roleLabels = { ADMIN: "管理员", USER: "用户" };
+const taskStatusLabels = {
+  PENDING: "等待处理",
+  RUNNING: "处理中",
+  RETRY_WAIT: "等待重试",
+  SUCCEEDED: "已完成",
+  FAILED: "失败",
+};
 async function loadUser() {
   if (!token.get()) return;
   try {
@@ -78,7 +86,7 @@ async function loadAdmin() {
   reviews.value = await api("/admin/learning/review-tasks?include_future=true");
 }
 async function createKb() {
-  const name = prompt("Knowledge base name");
+  const name = prompt("请输入知识库名称");
   if (!name) return;
   await api("/knowledge-bases", {
     method: "POST",
@@ -102,7 +110,7 @@ async function uploadFile(e) {
     method: "POST",
     body,
   });
-  notice.value = `Parsed ${result.chunk_count} chunks; task queued`;
+  notice.value = `已解析 ${result.chunk_count} 个文本块，后台任务已加入队列`;
   if (result.task_id) trackTask(result.task_id);
   e.target.value = "";
 }
@@ -114,25 +122,25 @@ async function syncSource(type) {
     { method: "POST", body: JSON.stringify(payload) },
   );
   notice.value = result.unchanged
-    ? "Source unchanged"
-    : `Created ${result.chunk_count} chunks; task queued`;
+    ? "知识源内容没有变化"
+    : `已创建 ${result.chunk_count} 个文本块，后台任务已加入队列`;
   if (result.task_id) trackTask(result.task_id);
 }
 async function trackTask(taskId) {
   for (let attempt = 0; attempt < 120; attempt += 1) {
     const task = await api(`/admin/tasks/${taskId}`);
-    notice.value = `Ingestion ${task.status.toLowerCase()} · ${task.progress}%`;
+    notice.value = `入库任务：${taskStatusLabels[task.status] || task.status} · ${task.progress}%`;
     if (task.status === "SUCCEEDED") {
       await loadAdmin();
       return;
     }
     if (task.status === "FAILED") {
-      notice.value = `Ingestion failed: ${task.error_message || task.error_code}`;
+      notice.value = `入库失败：${task.error_message || task.error_code}`;
       return;
     }
     await new Promise((resolve) => setTimeout(resolve, 1500));
   }
-  notice.value = "Ingestion is still running. Check the task list later.";
+  notice.value = "入库任务仍在运行，请稍后查看任务状态。";
 }
 async function review(type, id, action) {
   await api(`/knowledge-candidates/${type}/${id}:${action}`, {
@@ -172,7 +180,7 @@ async function ask() {
         if (type === "delta") reply.content += data.text;
         if (type === "citation") citations.value = data;
         if (type === "error")
-          reply.content = "Unable to answer from the current knowledge.";
+          reply.content = "暂时无法根据当前知识库回答这个问题。";
       },
     );
   } catch (e) {
@@ -186,74 +194,69 @@ onMounted(loadUser);
 <template>
   <main v-if="!user" class="auth-shell">
     <section class="auth-panel">
-      <div class="brand">
-        <Brain :size="28" /><span>Lei Mingkang Agent</span>
-      </div>
-      <h1>{{ mode === "login" ? "Sign in" : "Create account" }}</h1>
-      <p>Ask about my projects, experience and learning.</p>
+      <div class="brand"><Brain :size="28" /><span>Laylight Agent</span></div>
+      <h1>{{ mode === "login" ? "登录" : "创建账户" }}</h1>
+      <p>与我的个人智能体交流项目、经历和学习内容。</p>
       <form @submit.prevent="authenticate">
-        <label>Email<input v-model="email" type="email" required /></label
+        <label>邮箱<input v-model="email" type="email" required /></label
         ><label
-          >Password<input
-            v-model="password"
-            type="password"
-            minlength="8"
-            required
+          >密码<input v-model="password" type="password" minlength="8" required
         /></label>
         <p v-if="error" class="error">{{ error }}</p>
         <button :disabled="busy">
-          {{ busy ? "Please wait" : mode === "login" ? "Sign in" : "Register" }}
+          {{ busy ? "请稍候" : mode === "login" ? "登录" : "注册" }}
         </button>
       </form>
       <button
         class="text-button"
         @click="mode = mode === 'login' ? 'register' : 'login'"
       >
-        {{ mode === "login" ? "Create an account" : "Back to sign in" }}
+        {{ mode === "login" ? "创建账户" : "返回登录" }}
       </button>
     </section>
   </main>
   <div v-else class="app-shell">
     <aside>
-      <div class="brand"><Brain :size="24" /><span>Personal Agent</span></div>
+      <div class="brand"><Brain :size="24" /><span>Laylight Agent</span></div>
       <nav v-if="isAdmin">
         <button
           :class="{ active: tab === 'knowledge' }"
           @click="tab = 'knowledge'"
         >
-          <BookOpen />Knowledge</button
+          <BookOpen />知识管理</button
         ><button :class="{ active: tab === 'review' }" @click="tab = 'review'">
-          <RefreshCw />Review
+          <RefreshCw />学习复习
         </button>
       </nav>
       <nav v-else>
-        <button class="active"><MessageSquare />Conversation</button>
+        <button class="active"><MessageSquare />对话</button>
       </nav>
       <div class="account">
         <ShieldCheck v-if="isAdmin" /><span
-          >{{ user.email }}<small>{{ user.role }}</small></span
-        ><button title="Sign out" @click="logout"><LogOut /></button>
+          >{{ user.email
+          }}<small>{{ roleLabels[user.role] || user.role }}</small></span
+        ><button title="退出登录" @click="logout"><LogOut /></button>
       </div>
     </aside>
     <section v-if="!isAdmin" class="chat">
       <header>
         <div>
-          <h2>{{ agent?.name || "Personal Agent" }}</h2>
+          <h2>{{ agent?.name || "Laylight Agent" }}</h2>
           <p>{{ agent?.description }}</p>
         </div>
       </header>
       <div class="messages">
         <div v-if="!messages.length" class="empty">
           <Brain />
-          <h3>Start a conversation</h3>
-          <p>Ask about my background, projects or technical learning.</p>
+          <h3>开始对话</h3>
+          <p>可以询问我的经历、项目或技术学习内容。</p>
         </div>
         <article v-for="(m, i) in messages" :key="i" :class="m.role">
-          <strong>{{ m.role === "user" ? "You" : "Agent" }}</strong>
+          <strong>{{ m.role === "user" ? "你" : "Laylight Agent" }}</strong>
           <p>{{ m.content }}</p>
         </article>
         <div v-if="citations.length" class="sources">
-          <b>Sources</b
+          <b>参考来源</b
           ><span v-for="c in citations" :key="c.chunkId"
             >[{{ c.index }}] {{ Math.round(c.score * 100) }}%</span
           >
@@ -262,31 +265,27 @@ onMounted(loadUser);
       <form class="composer" @submit.prevent="ask">
         <textarea
           v-model="question"
-          placeholder="Ask a question..."
+          placeholder="输入你的问题..."
           rows="2"
         ></textarea
-        ><button title="Send" :disabled="busy"><Send /></button>
+        ><button title="发送" :disabled="busy"><Send /></button>
       </form>
     </section>
     <section v-else class="workspace">
       <header>
         <div>
           <h2>
-            {{
-              tab === "knowledge" ? "Knowledge management" : "Learning review"
-            }}
+            {{ tab === "knowledge" ? "知识管理" : "学习复习" }}
           </h2>
           <p>
             {{
               tab === "knowledge"
-                ? "Manage the knowledge behind your public Agent."
-                : "Review active knowledge on schedule."
+                ? "管理 Laylight Agent 对外使用的个人知识。"
+                : "按计划复习已激活的知识。"
             }}
           </p>
         </div>
-        <button v-if="tab === 'knowledge'" @click="createKb">
-          New knowledge base
-        </button>
+        <button v-if="tab === 'knowledge'" @click="createKb">新建知识库</button>
       </header>
       <template v-if="tab === 'knowledge'"
         ><div class="toolbar">
@@ -301,42 +300,43 @@ onMounted(loadUser);
           >
             {{
               knowledgeBases.find((k) => k.id === selectedKb)?.is_published
-                ? "Unpublish"
-                : "Publish Agent"
+                ? "取消发布"
+                : "发布 Agent"
             }}
           </button>
         </div>
         <div class="admin-grid">
           <section>
-            <h3><FileUp />Import file</h3>
+            <h3><FileUp />导入文件</h3>
             <input type="file" accept=".pdf,.md,.txt" @change="uploadFile" />
           </section>
           <section>
-            <h3><BookOpen />Sync webpage</h3>
+            <h3><BookOpen />同步网页</h3>
             <input
               v-model="webUrl"
               placeholder="https://example.com/notes"
-            /><button @click="syncSource('web')">Sync</button>
+            /><button @click="syncSource('web')">同步</button>
           </section>
           <section>
-            <h3><GitBranch />Sync Git project</h3>
-            <input
-              v-model="gitPath"
-              placeholder="Configured server path"
-            /><button @click="syncSource('git')">Sync</button>
+            <h3><GitBranch />同步 Git 项目</h3>
+            <input v-model="gitPath" placeholder="已配置的服务器路径" /><button
+              @click="syncSource('git')"
+            >
+              同步
+            </button>
           </section>
         </div>
         <p v-if="notice" class="notice">
           {{ notice }}
         </p>
         <section class="table-section">
-          <h3>Knowledge candidates</h3>
+          <h3>知识候选项</h3>
           <table>
             <thead>
               <tr>
-                <th>Name / relation</th>
-                <th>Confidence</th>
-                <th>Action</th>
+                <th>名称 / 关系</th>
+                <th>置信度</th>
+                <th>操作</th>
               </tr>
             </thead>
             <tbody>
@@ -347,12 +347,12 @@ onMounted(loadUser);
                 <td>{{ Math.round(e.confidence * 100) }}%</td>
                 <td>
                   <button @click="review('entities', e.id, 'accept')">
-                    Accept</button
+                    接受</button
                   ><button
                     class="danger"
                     @click="review('entities', e.id, 'reject')"
                   >
-                    Reject
+                    拒绝
                   </button>
                 </td>
               </tr>
@@ -361,12 +361,12 @@ onMounted(loadUser);
                 <td>{{ Math.round(r.confidence * 100) }}%</td>
                 <td>
                   <button @click="review('relations', r.id, 'accept')">
-                    Accept</button
+                    接受</button
                   ><button
                     class="danger"
                     @click="review('relations', r.id, 'reject')"
                   >
-                    Reject
+                    拒绝
                   </button>
                 </td>
               </tr>
@@ -378,24 +378,24 @@ onMounted(loadUser);
         <table>
           <thead>
             <tr>
-              <th>Knowledge</th>
-              <th>Mastery</th>
-              <th>Interval</th>
-              <th>Due</th>
-              <th>Grade</th>
+              <th>知识</th>
+              <th>掌握度</th>
+              <th>复习间隔</th>
+              <th>到期日期</th>
+              <th>评分</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="r in reviews" :key="r.id">
               <td>{{ r.entityName }}</td>
               <td>{{ Math.round(r.mastery * 100) }}%</td>
-              <td>{{ r.intervalDays }} days</td>
-              <td>{{ new Date(r.dueAt).toLocaleDateString() }}</td>
+              <td>{{ r.intervalDays }} 天</td>
+              <td>{{ new Date(r.dueAt).toLocaleDateString("zh-CN") }}</td>
               <td class="grade-actions">
                 <button
                   v-for="gradeValue in [1, 2, 3, 4, 5]"
                   :key="gradeValue"
-                  :title="`Grade ${gradeValue}`"
+                  :title="`评分 ${gradeValue}`"
                   @click="grade(r.entityId, gradeValue)"
                 >
                   {{ gradeValue }}
