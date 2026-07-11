@@ -12,14 +12,14 @@ class Settings(BaseSettings):
     redis_password: str | None = None
     jwt_secret: str = "development-only-change-me"
     llm_api_key: str | None = None
-    llm_base_url: str | None = None
-    chat_model: str | None = None
+    llm_base_url: str = "https://api.deepseek.com"
+    chat_model: str = "deepseek-chat"
     embedding_model: str | None = None
     file_storage_path: str = "uploads"
     web_crawl_user_agent: str = "PersonalKnowledgeAgent/0.1"
     sync_interval_minutes: int = 30
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=("../.env", ".env"), extra="ignore")
 
     @model_validator(mode="after")
     def validate_production_secrets(self) -> "Settings":

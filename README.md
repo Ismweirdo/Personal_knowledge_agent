@@ -6,6 +6,8 @@
 
 当前仓库提供 M1 工程骨架：应用启动、配置加载、统一错误结构、健康检查、测试和 Docker Compose 基础设施。知识库、入库、检索和 Agent 等目录已按设计文档划分，业务能力将在后续里程碑实现。
 
+开发环境默认通过 OpenAI 兼容协议接入 DeepSeek，默认模型为 `deepseek-chat`。真实 API Key 仅通过本地 `.env` 的 `LLM_API_KEY` 注入，禁止提交到仓库。
+
 ## 本地启动
 
 要求 Python 3.12+。
