@@ -31,3 +31,7 @@ def test_document_chunks_have_vector_embedding_column() -> None:
     column = Base.metadata.tables["document_chunks"].c.embedding
 
     assert column.type.dim == 1536
+
+
+def test_conversation_tables_are_registered() -> None:
+    assert {"conversations", "messages", "message_citations"} <= set(Base.metadata.tables)

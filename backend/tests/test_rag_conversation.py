@@ -1,0 +1,96 @@
+from collections.abc import AsyncIterator
+
+import pytest
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+from app.conversation.service import RagConversationService
+from app.infrastructure.models import Base, Conversation, KnowledgeBase, Message, User
+
+
+class FakeRetrieval:
+    async def search(self, user_id: str, kb_id: str, query: str, *, limit: int):
+        return []
+
+
+class FakeChat:
+    model = "fake-chat"
+
+    async def stream(self, messages: list[dict[str, str]]) -> AsyncIterator[str]:
+        yield "hello "
+        yield "world"
+
+
+class FailingChat:
+    model = "failing-chat"
+
+    async def stream(self, messages: list[dict[str, str]]) -> AsyncIterator[str]:
+        yield "partial"
+        raise RuntimeError("upstream disconnected")
+
+
+@pytest.fixture
+async def session():
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+    async with factory() as value:
+        yield value
+    await engine.dispose()
+
+
+async def seed_conversation(session) -> tuple[str, str]:
+    user = User(email="rag@example.com", password_hash="unused")
+    session.add(user)
+    await session.flush()
+    kb = KnowledgeBase(user_id=user.id, name="RAG")
+    session.add(kb)
+    await session.flush()
+    conversation = Conversation(user_id=user.id, kb_id=kb.id, title="Test")
+    session.add(conversation)
+    await session.commit()
+    return user.id, conversation.id
+
+
+@pytest.mark.asyncio
+async def test_successful_stream_persists_completed_answer(session) -> None:
+    user_id, conversation_id = await seed_conversation(session)
+    service = RagConversationService(session, FakeRetrieval(), FakeChat())
+
+    events = [event async for event in service.stream(user_id, conversation_id, "question")]
+    assistant = await session.scalar(
+        select(Message).where(
+            Message.conversation_id == conversation_id, Message.role == "assistant"
+        )
+    )
+
+    assert [event.splitlines()[0] for event in events] == [
+        "event: metadata",
+        "event: citation",
+        "event: delta",
+        "event: delta",
+        "event: done",
+    ]
+    assert assistant is not None
+    assert assistant.status == "COMPLETED"
+    assert assistant.content == "hello world"
+
+
+@pytest.mark.asyncio
+async def test_failed_stream_persists_partial_answer_and_failed_status(session) -> None:
+    user_id, conversation_id = await seed_conversation(session)
+    service = RagConversationService(session, FakeRetrieval(), FailingChat())
+
+    events = [event async for event in service.stream(user_id, conversation_id, "question")]
+    assistant = await session.scalar(
+        select(Message).where(
+            Message.conversation_id == conversation_id, Message.role == "assistant"
+        )
+    )
+
+    assert events[-1].startswith("event: error")
+    assert "upstream disconnected" not in events[-1]
+    assert assistant is not None
+    assert assistant.status == "FAILED"
+    assert assistant.content == "partial"

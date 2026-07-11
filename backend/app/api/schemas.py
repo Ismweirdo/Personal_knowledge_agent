@@ -46,3 +46,20 @@ class DocumentUploadResponse(BaseModel):
     content_hash: str
     chunk_count: int
     unchanged: bool = False
+
+
+class ConversationCreate(BaseModel):
+    knowledge_base_id: str
+    title: str = Field(default="New conversation", min_length=1, max_length=200)
+
+
+class ConversationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    knowledge_base_id: str = Field(validation_alias="kb_id")
+    title: str
+    created_at: datetime
+
+
+class ChatRequest(BaseModel):
+    content: str = Field(min_length=1, max_length=8000)
