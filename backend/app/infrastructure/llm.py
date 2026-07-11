@@ -50,7 +50,6 @@ class ChatModelClient:
                 "LLM provider is temporarily unavailable",
                 status_code=503,
             ) from exc
-
         return response.choices[0].message.content or ""
 
     async def stream(self, messages: Sequence[ChatCompletionMessageParam]) -> AsyncIterator[str]:
@@ -76,3 +75,9 @@ class ChatModelClient:
                 "LLM provider is temporarily unavailable",
                 status_code=503,
             ) from exc
+
+
+def get_chat_model_client() -> ChatModelClient:
+    from app.infrastructure.config import get_settings
+
+    return ChatModelClient.from_settings(get_settings())
