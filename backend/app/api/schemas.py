@@ -18,6 +18,12 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
 
 
+class CurrentUserResponse(BaseModel):
+    id: str
+    email: EmailStr
+    role: str
+
+
 class KnowledgeBaseCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=2000)
