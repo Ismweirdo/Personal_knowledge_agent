@@ -1,6 +1,7 @@
 from datetime import datetime
 from uuid import uuid4
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     JSON,
     CheckConstraint,
@@ -100,6 +101,7 @@ class DocumentChunk(Base):
     chunk_index: Mapped[int] = mapped_column()
     token_count: Mapped[int] = mapped_column()
     chunk_metadata: Mapped[dict[str, object] | None] = mapped_column(JSON)
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(1536))
 
 
 class KnowledgeEntity(Base):

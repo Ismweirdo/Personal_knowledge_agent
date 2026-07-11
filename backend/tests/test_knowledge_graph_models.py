@@ -25,3 +25,9 @@ def test_entity_identity_is_unique_within_knowledge_base() -> None:
     constraint_names = {constraint.name for constraint in table.constraints}
 
     assert "uq_entity_identity" in constraint_names
+
+
+def test_document_chunks_have_vector_embedding_column() -> None:
+    column = Base.metadata.tables["document_chunks"].c.embedding
+
+    assert column.type.dim == 1536
