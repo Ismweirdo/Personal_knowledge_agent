@@ -41,16 +41,17 @@ async def session():
 
 
 async def seed_conversation(session) -> tuple[str, str]:
-    user = User(email="rag@example.com", password_hash="unused")
-    session.add(user)
+    admin = User(email="admin@example.com", password_hash="unused", role="ADMIN")
+    visitor = User(email="rag@example.com", password_hash="unused", role="USER")
+    session.add_all([admin, visitor])
     await session.flush()
-    kb = KnowledgeBase(user_id=user.id, name="RAG")
+    kb = KnowledgeBase(user_id=admin.id, name="RAG", is_published=True)
     session.add(kb)
     await session.flush()
-    conversation = Conversation(user_id=user.id, kb_id=kb.id, title="Test")
+    conversation = Conversation(user_id=visitor.id, kb_id=kb.id, title="Test")
     session.add(conversation)
     await session.commit()
-    return user.id, conversation.id
+    return visitor.id, conversation.id
 
 
 @pytest.mark.asyncio

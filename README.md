@@ -1,6 +1,8 @@
 # Personal Learning Knowledge Agent
 
-基于 FastAPI 的持续学习型个人知识库与知识图谱 Agent。系统从文档、网页、项目和学习记录中增量吸收内容，同时维护可追溯的原文知识库和结构化知识图谱，用于问答、关联发现、知识缺口分析和复习规划。
+基于 FastAPI 的“雷明康个人 Agent”。管理员持续导入自己的文档、项目和学习记录；普通用户只能与该 Agent 对话，不能创建自己的知识库、上传资料或修改 Agent 知识。
+
+系统区分管理员端和用户端：管理员端负责知识源、索引、图谱审核和发布；用户端只提供注册登录、会话、流式问答、引用查看与反馈。
 
 ## 当前状态
 
@@ -32,6 +34,15 @@ ruff check .
 ```
 
 所有后续功能从 `main` 创建独立分支，经测试、Pull Request 和 Review 后合并。
+
+## 初始化管理员
+
+公开注册只创建普通用户。数据库迁移完成后，在服务器终端交互式创建或提升唯一管理员（密码不会出现在命令历史中）：
+
+```bash
+cd backend
+python -m app.infrastructure.bootstrap_admin your-email@example.com
+```
 
 ## Docker Compose
 

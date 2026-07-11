@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, UploadFile, status
 
-from app.api.dependencies import CurrentUserId, Session, SettingsDependency
+from app.api.dependencies import AdminUserId, Session, SettingsDependency
 from app.api.schemas import DocumentUploadResponse
 from app.infrastructure.embedding import EmbeddingClient, get_embedding_client
 from app.ingestion.indexing import VectorIndexingService
@@ -22,7 +22,7 @@ async def upload_document(
     file: Annotated[UploadFile, File()],
     session: Session,
     settings: SettingsDependency,
-    user_id: CurrentUserId,
+    user_id: AdminUserId,
 ) -> DocumentUploadResponse:
     return await FileIngestionService(session, settings).upload(user_id, knowledge_base_id, file)
 
@@ -31,7 +31,7 @@ async def upload_document(
 async def index_source(
     source_id: str,
     session: Session,
-    user_id: CurrentUserId,
+    user_id: AdminUserId,
     embedding_client: EmbeddingDependency,
 ) -> dict[str, int | str]:
     count = await VectorIndexingService(session, embedding_client).index(user_id, source_id)

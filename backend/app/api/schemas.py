@@ -21,11 +21,13 @@ class TokenResponse(BaseModel):
 class KnowledgeBaseCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=2000)
+    is_published: bool = False
 
 
 class KnowledgeBaseUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=2000)
+    is_published: bool | None = None
 
 
 class KnowledgeBaseResponse(BaseModel):
@@ -35,6 +37,7 @@ class KnowledgeBaseResponse(BaseModel):
     name: str
     description: str | None
     embedding_model: str | None
+    is_published: bool
     created_at: datetime
     updated_at: datetime
 
@@ -63,3 +66,7 @@ class ConversationResponse(BaseModel):
 
 class ChatRequest(BaseModel):
     content: str = Field(min_length=1, max_length=8000)
+
+
+class KnowledgeReviewRequest(BaseModel):
+    reason: str | None = Field(default=None, max_length=1000)

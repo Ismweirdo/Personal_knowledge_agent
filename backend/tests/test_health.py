@@ -29,3 +29,6 @@ def test_openapi_uses_versioned_business_api_prefix() -> None:
 
     assert "/api/v1" not in paths
     assert "/health" in paths
+    assert "/api/v1/chunks/{chunk_id}/knowledge:extract" in paths
+    assert "/api/v1/knowledge-bases/{kb_id}/knowledge-candidates" in paths
+    assert "/api/v1/knowledge-candidates/{candidate_type}/{candidate_id}:{action}" in paths
