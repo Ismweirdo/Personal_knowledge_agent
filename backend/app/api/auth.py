@@ -2,7 +2,14 @@ from fastapi import APIRouter, status
 from sqlalchemy import select
 
 from app.api.dependencies import CurrentUserId, Session, SettingsDependency
-from app.api.schemas import CurrentUserResponse, LoginRequest, RegisterRequest, TokenResponse
+from app.api.schemas import (
+    AdminLoginRequest,
+    CurrentUserResponse,
+    LoginRequest,
+    RegisterRequest,
+    TokenResponse,
+    VisitorAccessRequest,
+)
 from app.infrastructure.models import User
 from app.infrastructure.security import AuthService
 
@@ -26,6 +33,26 @@ async def login(
     settings: SettingsDependency,
 ) -> TokenResponse:
     token = await AuthService(session, settings).login(payload.email, payload.password)
+    return TokenResponse(access_token=token)
+
+
+@router.post("/admin/login", response_model=TokenResponse)
+async def admin_login(
+    payload: AdminLoginRequest,
+    session: Session,
+    settings: SettingsDependency,
+) -> TokenResponse:
+    token = await AuthService(session, settings).admin_login(payload.username, payload.password)
+    return TokenResponse(access_token=token)
+
+
+@router.post("/access", response_model=TokenResponse)
+async def visitor_access(
+    payload: VisitorAccessRequest,
+    session: Session,
+    settings: SettingsDependency,
+) -> TokenResponse:
+    token = await AuthService(session, settings).visitor_access(payload.access_key)
     return TokenResponse(access_token=token)
 
 

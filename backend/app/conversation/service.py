@@ -2,12 +2,18 @@ import json
 from collections.abc import AsyncIterator
 from time import monotonic
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.errors import ApplicationError
 from app.infrastructure.llm import ChatModelClient
-from app.infrastructure.models import Conversation, KnowledgeBase, Message, MessageCitation
+from app.infrastructure.models import (
+    Conversation,
+    KnowledgeBase,
+    Message,
+    MessageCitation,
+    VisitorFeedback,
+)
 from app.retrieval.service import RetrievalResult, RetrievalService
 
 SYSTEM_PROMPT = """Answer only from the supplied context. If evidence is insufficient, say so.
@@ -41,6 +47,50 @@ class RagConversationService:
         await self.session.commit()
         await self.session.refresh(conversation)
         return conversation
+
+    async def list_conversations(self, user_id: str) -> list[Conversation]:
+        result = await self.session.scalars(
+            select(Conversation)
+            .where(Conversation.user_id == user_id)
+            .order_by(Conversation.created_at.desc())
+        )
+        return list(result)
+
+    async def list_messages(self, user_id: str, conversation_id: str) -> list[Message]:
+        conversation = await self._get(user_id, conversation_id)
+        result = await self.session.scalars(
+            select(Message)
+            .where(Message.conversation_id == conversation.id)
+            .order_by(Message.created_at)
+        )
+        return list(result)
+
+    async def delete(self, user_id: str, conversation_id: str) -> None:
+        conversation = await self._get(user_id, conversation_id)
+        await self.session.execute(delete(Conversation).where(Conversation.id == conversation.id))
+        await self.session.commit()
+
+    async def feedback(
+        self, user_id: str, conversation_id: str | None, position: str, comment: str
+    ) -> VisitorFeedback:
+        if conversation_id is not None:
+            await self._get(user_id, conversation_id)
+        feedback = VisitorFeedback(
+            user_id=user_id,
+            conversation_id=conversation_id,
+            position=position.strip(),
+            comment=comment.strip(),
+        )
+        self.session.add(feedback)
+        await self.session.commit()
+        await self.session.refresh(feedback)
+        return feedback
+
+    async def list_feedback(self) -> list[VisitorFeedback]:
+        result = await self.session.scalars(
+            select(VisitorFeedback).order_by(VisitorFeedback.created_at.desc()).limit(200)
+        )
+        return list(result)
 
     async def stream(self, user_id: str, conversation_id: str, question: str) -> AsyncIterator[str]:
         conversation = await self._get(user_id, conversation_id)

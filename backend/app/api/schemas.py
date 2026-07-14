@@ -13,6 +13,15 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class AdminLoginRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=100)
+    password: str = Field(min_length=1, max_length=128)
+
+
+class VisitorAccessRequest(BaseModel):
+    access_key: str = Field(min_length=1, max_length=128)
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -88,8 +97,33 @@ class ConversationResponse(BaseModel):
     created_at: datetime
 
 
+class MessageResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    role: str
+    content: str
+    status: str
+    created_at: datetime
+
+
 class ChatRequest(BaseModel):
     content: str = Field(min_length=1, max_length=8000)
+
+
+class VisitorFeedbackCreate(BaseModel):
+    conversation_id: str | None = None
+    position: str = Field(min_length=1, max_length=120)
+    comment: str = Field(min_length=1, max_length=2000)
+
+
+class VisitorFeedbackResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    user_id: str
+    conversation_id: str | None
+    position: str
+    comment: str
+    created_at: datetime
 
 
 class KnowledgeReviewRequest(BaseModel):

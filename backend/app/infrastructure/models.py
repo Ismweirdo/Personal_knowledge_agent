@@ -303,3 +303,15 @@ class MessageCitation(Base):
     )
     score: Mapped[float] = mapped_column(Float)
     rank: Mapped[int] = mapped_column()
+
+
+class VisitorFeedback(Base):
+    __tablename__ = "visitor_feedback"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    conversation_id: Mapped[str | None] = mapped_column(
+        ForeignKey("conversations.id", ondelete="SET NULL"), index=True
+    )
+    position: Mapped[str] = mapped_column(String(120))
+    comment: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
