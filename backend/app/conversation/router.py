@@ -26,7 +26,12 @@ def build_service(session: Session, embedding: Embedding, chat: Chat) -> RagConv
     return RagConversationService(session, RetrievalService(session, embedding), chat)
 
 
-Service = Annotated[RagConversationService, Depends(build_service)]
+def build_metadata_service(session: Session) -> RagConversationService:
+    return RagConversationService(session)
+
+
+Service = Annotated[RagConversationService, Depends(build_metadata_service)]
+StreamService = Annotated[RagConversationService, Depends(build_service)]
 
 
 @router.post("", response_model=ConversationResponse, status_code=status.HTTP_201_CREATED)
@@ -76,7 +81,7 @@ async def delete_conversation(
 
 @router.post("/{conversation_id}/messages:stream")
 async def stream_message(
-    conversation_id: str, payload: ChatRequest, user_id: CurrentUserId, service: Service
+    conversation_id: str, payload: ChatRequest, user_id: CurrentUserId, service: StreamService
 ) -> StreamingResponse:
     return StreamingResponse(
         service.stream(user_id, conversation_id, payload.content),

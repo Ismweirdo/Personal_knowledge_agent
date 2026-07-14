@@ -27,7 +27,10 @@ def encode_sse(event: str, data: object) -> str:
 
 class RagConversationService:
     def __init__(
-        self, session: AsyncSession, retrieval: RetrievalService, chat: ChatModelClient
+        self,
+        session: AsyncSession,
+        retrieval: RetrievalService | None = None,
+        chat: ChatModelClient | None = None,
     ) -> None:
         self.session = session
         self.retrieval = retrieval
@@ -93,6 +96,10 @@ class RagConversationService:
         return list(result)
 
     async def stream(self, user_id: str, conversation_id: str, question: str) -> AsyncIterator[str]:
+        if self.retrieval is None or self.chat is None:
+            raise ApplicationError(
+                "MODEL_NOT_CONFIGURED", "Model is not configured", status_code=503
+            )
         conversation = await self._get(user_id, conversation_id)
         user_message = Message(conversation_id=conversation.id, role="user", content=question)
         assistant = Message(
