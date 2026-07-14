@@ -1,6 +1,8 @@
 import os
 
 import pytest
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from redis.asyncio import Redis
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -17,6 +19,7 @@ from app.retrieval.service import RetrievalService
 pytestmark = pytest.mark.integration
 DATABASE_URL = os.getenv("TEST_DATABASE_URL")
 REDIS_URL = os.getenv("TEST_REDIS_URL")
+ALEMBIC_HEAD = ScriptDirectory.from_config(Config("alembic.ini")).get_current_head()
 
 
 class FakeEmbedding:
@@ -37,7 +40,7 @@ async def test_pgvector_migrations_retrieval_and_redis() -> None:
         )
         migration = await session.scalar(text("SELECT version_num FROM alembic_version"))
         assert extension == "vector"
-        assert migration == "20260711_09"
+        assert migration == ALEMBIC_HEAD
 
         admin = User(email="integration@example.com", password_hash="unused", role="ADMIN")
         session.add(admin)

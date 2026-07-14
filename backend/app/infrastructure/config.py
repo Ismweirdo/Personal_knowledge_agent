@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     background_worker_enabled: bool = False
     background_worker_poll_seconds: float = 2.0
     background_task_stale_seconds: int = 300
+    admin_username: str | None = None
+    admin_password: str | None = None
+    visitor_access_key: str | None = None
 
     model_config = SettingsConfigDict(env_file=("../.env", ".env"), extra="ignore")
 

@@ -34,7 +34,9 @@ def test_document_chunks_have_vector_embedding_column() -> None:
 
 
 def test_conversation_tables_are_registered() -> None:
-    assert {"conversations", "messages", "message_citations"} <= set(Base.metadata.tables)
+    assert {"conversations", "messages", "message_citations", "visitor_feedback"} <= set(
+        Base.metadata.tables
+    )
 
 
 def test_review_task_table_is_registered() -> None:

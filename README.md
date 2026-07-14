@@ -2,7 +2,7 @@
 
 基于 FastAPI 的“个人 Agent”。管理员持续导入自己的文档、项目和学习记录；普通用户只能与该 Agent 对话，不能创建自己的知识库、上传资料或修改 Agent 知识。
 
-系统区分管理员端和用户端：管理员端负责知识源、索引、图谱审核和发布；用户端只提供注册登录、会话、流式问答、引用查看与反馈。
+系统区分管理员端和用户端：管理员端负责知识源、索引、图谱审核、访客评论和发布；用户端不注册账号，只输入站点密钥进入对话，使用独立访客身份管理自己的会话、流式问答、引用查看与岗位建议评论。
 
 ## 当前状态
 
@@ -35,6 +35,9 @@ EMBEDDING_MODEL=openai/text-embedding-3-small
 EMBEDDING_DIMENSIONS=1536
 EMBEDDING_API_KEY=your-fine-grained-token
 BACKGROUND_WORKER_ENABLED=true
+ADMIN_USERNAME=your-admin-name
+ADMIN_PASSWORD=your-admin-password
+VISITOR_ACCESS_KEY=your-visitor-access-key
 ```
 
 ## 测试
@@ -47,9 +50,9 @@ ruff check .
 
 所有后续功能从 `main` 创建独立分支，经测试、Pull Request 和 Review 后合并。
 
-## 初始化管理员
+## 初始化访问入口
 
-公开注册只创建普通用户。数据库迁移完成后，在服务器终端交互式创建或提升唯一管理员（密码不会出现在命令历史中）：
+前端不再开放注册。管理员登录入口位于右上角，账号和密码通过 `.env` 的 `ADMIN_USERNAME`、`ADMIN_PASSWORD` 注入；访客使用 `VISITOR_ACCESS_KEY` 获取独立访客 Token 后进入对话界面。旧的交互式管理员初始化命令仍可作为维护工具使用：
 
 ```bash
 cd backend
@@ -70,6 +73,7 @@ docker compose -f deploy/docker-compose.yml up --build
 
 - [项目设计文档](docs/项目1设计文档.md)：产品边界、架构、数据模型和里程碑。
 - [项目技术文档](docs/项目1技术文档.md)：工程结构、API、入库、RAG、安全、测试与部署。
+- [管理员使用说明](docs/管理员使用说明.md)：管理员登录、知识维护、发布、审核、复习和 HR 评论查看。
 - [开发文档](docs/开发文档.md)：开发过程中遇到的问题、根因、解决方法、选择理由和剩余风险。
 - [持续学习与知识图谱设计](docs/持续学习与知识图谱设计.md)：证据、审核、冲突和学习闭环。
 - [验证与评测说明](docs/验证与评测说明.md)：自动化、真实依赖、效果评测和压测边界。
