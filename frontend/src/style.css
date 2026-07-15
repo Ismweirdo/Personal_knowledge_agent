@@ -388,6 +388,7 @@ nav button:hover {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 .chat header,
 .workspace header {
@@ -639,8 +640,12 @@ nav button:hover {
 }
 .workspace {
   overflow: auto;
+  padding-bottom: 28px;
 }
 .workspace > header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
   flex: none;
 }
 .toolbar,
@@ -759,7 +764,14 @@ nav button:hover {
   text-align: center;
 }
 .source-table-wrap {
-  overflow-x: auto;
+  max-height: min(46vh, 520px);
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+.source-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 .source-table th,
 .source-table td {
@@ -828,7 +840,9 @@ nav button:hover {
   background: rgba(255, 255, 255, 0.86);
   border: 1px solid #cce9fb;
   border-radius: 22px;
+  max-height: calc(100vh - 160px);
   overflow: auto;
+  scrollbar-gutter: stable;
 }
 .table-section h3 {
   padding: 0 16px;
@@ -1059,6 +1073,15 @@ th {
   .workspace,
   .chat-layout {
     height: calc(100vh - 64px);
+  }
+  .workspace {
+    overflow: auto;
+  }
+  .workspace > header {
+    position: static;
+  }
+  .source-table-wrap {
+    max-height: 38vh;
   }
   .admin-grid,
   .feedback-panel,
