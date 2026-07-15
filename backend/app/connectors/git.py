@@ -1,6 +1,11 @@
+import hashlib
 import os
 import re
+import shutil
 import subprocess
+import urllib.error
+import urllib.request
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -52,6 +57,9 @@ IMPORTANT_DOC_NAMES = {
     "上线运行手册.md",
 }
 IMPORTANT_CONFIG_NAMES = {"package.json", "pyproject.toml", "docker-compose.yml", "Dockerfile"}
+GITHUB_ARCHIVE_MAX_BYTES = 80 * 1024 * 1024
+GITHUB_ARCHIVE_TIMEOUT_SECONDS = 180
+GITHUB_CLONE_TIMEOUT_SECONDS = 90
 
 
 @dataclass(frozen=True)
@@ -68,7 +76,12 @@ def snapshot_repository(path: str, allowed_root: str | None) -> GitSnapshot:
     if github_url:
         with TemporaryDirectory(prefix="knowledge-agent-git-") as directory:
             repository = Path(directory) / "repo"
-            _clone_github(github_url, repository)
+            try:
+                _clone_github(github_url, repository)
+            except ApplicationError as exc:
+                if exc.code not in {"GIT_CLONE_TIMEOUT", "GIT_CLONE_FAILED"}:
+                    raise
+                _download_github_archive(github_url, repository)
             return _snapshot_local_repository(repository, locator=github_url)
     if _looks_like_github_locator(path):
         raise ApplicationError(
@@ -94,6 +107,7 @@ def _snapshot_allowed_local_repository(path: str, allowed_root: str | None) -> G
 
 
 def _snapshot_local_repository(repository: Path, *, locator: str) -> GitSnapshot:
+    revision: str | None = None
     try:
         revision = subprocess.run(
             ["git", "-C", str(repository), "rev-parse", "HEAD"],
@@ -102,10 +116,8 @@ def _snapshot_local_repository(repository: Path, *, locator: str) -> GitSnapshot
             check=True,
             timeout=10,
         ).stdout.strip()
-    except (subprocess.SubprocessError, OSError) as exc:
-        raise ApplicationError(
-            "GIT_READ_FAILED", "Unable to read Git repository", status_code=422
-        ) from exc
+    except (subprocess.SubprocessError, OSError):
+        revision = None
     sections: list[str] = []
     docs: list[Path] = []
     configs: list[Path] = []
@@ -120,7 +132,7 @@ def _snapshot_local_repository(repository: Path, *, locator: str) -> GitSnapshot
             configs.append(file)
         elif file.suffix.lower() in CODE_EXTENSIONS:
             code_files.append(file)
-    sections.append(_project_header(repository, locator, revision))
+    sections.append(_project_header(repository, locator, revision or "archive"))
     sections.extend(_document_sections(repository, docs))
     sections.extend(_config_sections(repository, configs))
     code_summary = _code_summary(repository, code_files)
@@ -135,6 +147,8 @@ def _snapshot_local_repository(repository: Path, *, locator: str) -> GitSnapshot
         raise ApplicationError(
             "GIT_CONTENT_EMPTY", "Repository has no supported text files", status_code=422
         )
+    if revision is None:
+        revision = hashlib.sha256(text.encode()).hexdigest()
     return GitSnapshot(
         revision=revision,
         text=text,
@@ -151,7 +165,7 @@ def _clone_github(url: str, target: Path) -> None:
             capture_output=True,
             text=True,
             check=False,
-            timeout=90,
+            timeout=GITHUB_CLONE_TIMEOUT_SECONDS,
             env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
         )
     except subprocess.TimeoutExpired as exc:
@@ -187,6 +201,147 @@ def _clone_github(url: str, target: Path) -> None:
     else:
         message = "GitHub 仓库克隆失败，请确认地址指向可访问的代码仓库"
     raise ApplicationError("GIT_CLONE_FAILED", message, status_code=422)
+
+
+def _download_github_archive(url: str, target: Path) -> None:
+    owner, repository = _github_owner_repository(url)
+    errors: list[str] = []
+    with TemporaryDirectory(prefix="knowledge-agent-archive-") as directory:
+        archive_path = Path(directory) / "repo.zip"
+        extract_root = Path(directory) / "extract"
+        for branch in _default_branch_candidates(owner, repository):
+            archive_url = (
+                f"https://codeload.github.com/{owner}/{repository}/zip/refs/heads/{branch}"
+            )
+            try:
+                _download_file(archive_url, archive_path)
+                _extract_zip(archive_path, extract_root)
+                roots = [item for item in extract_root.iterdir() if item.is_dir()]
+                if not roots:
+                    raise ApplicationError(
+                        "GITHUB_ARCHIVE_EMPTY",
+                        "GitHub 仓库压缩包为空，请确认仓库内容",
+                        status_code=422,
+                    )
+                shutil.copytree(roots[0], target)
+                return
+            except ApplicationError as exc:
+                errors.append(exc.message)
+                shutil.rmtree(extract_root, ignore_errors=True)
+                archive_path.unlink(missing_ok=True)
+        raise ApplicationError(
+            "GITHUB_ARCHIVE_DOWNLOAD_FAILED",
+            "服务器无法下载 GitHub 仓库压缩包，请稍后重试或检查仓库是否公开",
+            status_code=504,
+            details={"attempts": errors[-3:]},
+        )
+
+
+def _download_file(url: str, target: Path) -> None:
+    request = urllib.request.Request(url, headers={"User-Agent": "Laylight-Agent/0.1"})
+    try:
+        with urllib.request.urlopen(
+            request, timeout=GITHUB_ARCHIVE_TIMEOUT_SECONDS
+        ) as response:
+            length = response.headers.get("Content-Length")
+            if length and int(length) > GITHUB_ARCHIVE_MAX_BYTES:
+                raise ApplicationError(
+                    "GITHUB_ARCHIVE_TOO_LARGE",
+                    "GitHub 仓库压缩包过大，请改用服务器本地路径导入",
+                    status_code=413,
+                )
+            total = 0
+            with target.open("wb") as output:
+                while True:
+                    chunk = response.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    total += len(chunk)
+                    if total > GITHUB_ARCHIVE_MAX_BYTES:
+                        raise ApplicationError(
+                            "GITHUB_ARCHIVE_TOO_LARGE",
+                            "GitHub 仓库压缩包过大，请改用服务器本地路径导入",
+                            status_code=413,
+                        )
+                    output.write(chunk)
+    except TimeoutError as exc:
+        raise ApplicationError(
+            "GITHUB_ARCHIVE_TIMEOUT",
+            "GitHub 仓库压缩包下载超时，请稍后重试",
+            status_code=504,
+        ) from exc
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            raise ApplicationError(
+                "GITHUB_ARCHIVE_NOT_FOUND",
+                "找不到该 GitHub 仓库或默认分支",
+                status_code=422,
+            ) from exc
+        raise ApplicationError(
+            "GITHUB_ARCHIVE_DOWNLOAD_FAILED",
+            "GitHub 仓库压缩包下载失败",
+            status_code=504,
+        ) from exc
+    except urllib.error.URLError as exc:
+        raise ApplicationError(
+            "GITHUB_ARCHIVE_DOWNLOAD_FAILED",
+            "服务器暂时无法连接 GitHub 压缩包下载服务",
+            status_code=504,
+        ) from exc
+
+
+def _extract_zip(archive_path: Path, extract_root: Path) -> None:
+    extract_root.mkdir(parents=True, exist_ok=True)
+    try:
+        with zipfile.ZipFile(archive_path) as archive:
+            for member in archive.infolist():
+                destination = (extract_root / member.filename).resolve()
+                if (
+                    extract_root.resolve() not in destination.parents
+                    and destination != extract_root
+                ):
+                    raise ApplicationError(
+                        "GITHUB_ARCHIVE_INVALID",
+                        "GitHub 仓库压缩包路径不安全",
+                        status_code=422,
+                    )
+            archive.extractall(extract_root)
+    except zipfile.BadZipFile as exc:
+        raise ApplicationError(
+            "GITHUB_ARCHIVE_INVALID",
+            "GitHub 仓库压缩包无法解析",
+            status_code=422,
+        ) from exc
+
+
+def _default_branch_candidates(owner: str, repository: str) -> list[str]:
+    branches: list[str] = []
+    request = urllib.request.Request(
+        f"https://api.github.com/repos/{owner}/{repository}",
+        headers={"User-Agent": "Laylight-Agent/0.1", "Accept": "application/vnd.github+json"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            body = response.read().decode("utf-8")
+            match = re.search(r'"default_branch"\s*:\s*"([^"]+)"', body)
+            if match:
+                branches.append(match.group(1))
+    except (TimeoutError, urllib.error.URLError, UnicodeDecodeError):
+        pass
+    branches.extend(["main", "master"])
+    return list(dict.fromkeys(branches))
+
+
+def _github_owner_repository(url: str) -> tuple[str, str]:
+    parsed = urlparse(url)
+    parts = [part for part in parsed.path.split("/") if part]
+    if len(parts) < 2:
+        raise ApplicationError(
+            "INVALID_GITHUB_URL",
+            "GitHub 仓库地址格式不正确，请填写 https://github.com/用户名/仓库名",
+            status_code=422,
+        )
+    return parts[0], re.sub(r"\.git$", "", parts[1], flags=re.I)
 
 
 def normalize_github_url(value: str) -> str | None:
