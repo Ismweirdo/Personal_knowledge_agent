@@ -66,6 +66,35 @@ def test_git_snapshot_excludes_secrets_and_dependencies(tmp_path) -> None:
     assert len(snapshot.revision) == 40
 
 
+def test_git_snapshot_falls_back_to_github_archive(tmp_path, monkeypatch) -> None:
+    def fake_clone(url, target):
+        raise ApplicationError("GIT_CLONE_TIMEOUT", "timeout", status_code=504)
+
+    def fake_archive(url, target):
+        target.mkdir()
+        (target / "README.md").write_text("Archive project knowledge", encoding="utf-8")
+
+    monkeypatch.setattr("app.connectors.git._clone_github", fake_clone)
+    monkeypatch.setattr("app.connectors.git._download_github_archive", fake_archive)
+
+    snapshot = snapshot_repository("https://github.com/owner/repository", None)
+
+    assert snapshot.display_name == "repository"
+    assert "Archive project knowledge" in snapshot.text
+    assert len(snapshot.revision) == 64
+
+
+def test_git_snapshot_supports_plain_folder_import(tmp_path) -> None:
+    repository = tmp_path / "repo"
+    repository.mkdir()
+    (repository / "README.md").write_text("Plain folder knowledge", encoding="utf-8")
+
+    snapshot = snapshot_repository(str(repository), str(tmp_path))
+
+    assert "Plain folder knowledge" in snapshot.text
+    assert len(snapshot.revision) == 64
+
+
 @pytest.mark.parametrize(
     ("value", "expected"),
     [
