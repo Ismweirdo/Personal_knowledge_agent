@@ -5,7 +5,7 @@ import httpx
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.connectors.git import snapshot_repository
+from app.connectors.git import normalize_github_url, snapshot_repository
 from app.connectors.web import WebSnapshot, fetch_web, validate_public_url
 from app.infrastructure.config import Settings
 from app.infrastructure.errors import ApplicationError
@@ -64,6 +64,43 @@ def test_git_snapshot_excludes_secrets_and_dependencies(tmp_path) -> None:
     assert "Project knowledge" in snapshot.text
     assert "SECRET" not in snapshot.text
     assert len(snapshot.revision) == 40
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (
+            "https://github.com/Ismweirdo/Personal_knowledge_agent.git",
+            "https://github.com/Ismweirdo/Personal_knowledge_agent",
+        ),
+        (
+            "https://github.com/Ismweirdo/Personal_knowledge_agent/tree/main/backend",
+            "https://github.com/Ismweirdo/Personal_knowledge_agent",
+        ),
+        (
+            "github.com/Ismweirdo/Personal_knowledge_agent",
+            "https://github.com/Ismweirdo/Personal_knowledge_agent",
+        ),
+        (
+            "git@github.com:Ismweirdo/Personal_knowledge_agent.git",
+            "https://github.com/Ismweirdo/Personal_knowledge_agent",
+        ),
+    ],
+)
+def test_normalize_github_repository_urls(value: str, expected: str) -> None:
+    assert normalize_github_url(value) == expected
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "https://gitlab.com/owner/repository",
+        "https://github.com/owner",
+        "not-a-repository",
+    ],
+)
+def test_normalize_github_repository_url_rejects_invalid_values(value: str) -> None:
+    assert normalize_github_url(value) is None
 
 
 @pytest.mark.asyncio

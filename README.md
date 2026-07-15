@@ -6,9 +6,11 @@
 
 ## 当前状态
 
-当前已具备管理员/访客双端、文件/网页/Git 增量同步、持久化后台任务、GitHub Models Embedding、pgvector 检索、DeepSeek SSE 问答、证据化知识图谱、候选审核、学习复习、CI、可观测与部署基础。上传或同步完成解析后创建任务，Worker 自动完成 Embedding、活动版本切换和图谱候选抽取，管理员前端轮询进度。
+当前已具备管理员/访客双端、批量文件上传、文件/网页/Git 分类来源列表、来源更新删除、持久化后台任务、GitHub Models Embedding、pgvector 检索、DeepSeek SSE 问答、证据化知识图谱、候选审核、学习复习、CI、可观测与部署基础。上传或同步完成解析后创建任务，Worker 自动完成 Embedding 和活动版本切换；图谱候选抽取作为增强步骤执行，失败或跳过不影响问答知识先可用。
 
-当前问答链路使用 pgvector 余弦 Top-K 检索、来源引用和资料不足拒答 Prompt；知识图谱用于证据抽取、候选审核、修订和复习任务，尚未并入问答检索。混合检索、Reranker、Query Rewrite 和通用工具调用属于后续评测驱动的优化，不是当前已完成功能。
+当前问答链路对项目、技能和岗位类问题优先使用按来源均衡的结构化快速检索，保证简历和各项目仓库共同提供证据；其他问题使用 pgvector 检索。没有证据时直接拒答，不调用模型补全。DeepSeek 增量通过 SSE 到达浏览器，前端使用安全清洗后的 Markdown 渲染并逐帧显示。知识图谱用于证据抽取、候选审核、修订和复习任务，尚未并入问答检索。
+
+导入链路已增加基础清洗：PDF/Markdown/TXT 会清理页码、重复空白和重复行；Git 项目支持本地允许目录或 GitHub 仓库 URL，导入时优先保留 README、设计/技术文档、配置摘要和代码结构摘要，过滤依赖、测试、构建产物、密钥文件和泛化学习资料，避免把无关源码噪声直接暴露给访客问答。
 
 开发环境默认通过 OpenAI 兼容协议接入 DeepSeek，默认模型为 `deepseek-chat`。真实 API Key 仅通过本地 `.env` 的 `LLM_API_KEY` 注入，禁止提交到仓库。私人简历、学习笔记、项目源码与上传文件同样不得提交到公开仓库。
 
@@ -68,6 +70,22 @@ docker compose -f deploy/docker-compose.yml up --build
 ```
 
 应用通过 `http://localhost:8080` 访问。
+
+Compose 默认启动后台入库 Worker，并将当前项目目录以只读方式挂载到容器内 `/app/git-imports`，用于本地 Git 项目同步。以当前开发目录为例，管理员端“同步 Git 项目”可填写：
+
+```text
+/app/git-imports
+```
+
+如果要缩小或更换可导入范围，在 `.env` 中修改：
+
+```env
+GIT_IMPORT_HOST_ROOT=..
+GIT_IMPORT_ROOT=/app/git-imports
+BACKGROUND_WORKER_ENABLED=true
+```
+
+其中 `GIT_IMPORT_HOST_ROOT` 是宿主机路径，`GIT_IMPORT_ROOT` 是容器内路径；后端只允许同步 `GIT_IMPORT_ROOT` 内的文本项目文件，并排除 `.env*`、`.git`、依赖目录和构建产物。也可以直接填写公开 GitHub 仓库地址，例如 `https://github.com/owner/repo`；复制到的 `.git`、`/tree/分支/...`、省略协议或 GitHub SSH 地址会统一转换为 HTTPS 仓库地址。私有仓库当前不接收访问令牌。为了避免误扫密钥文件，不建议把包含令牌、桌面资料或下载目录的上级目录整体挂载进容器；需要导入其他本地项目时，把 `GIT_IMPORT_HOST_ROOT` 临时改为那个项目目录。若入库任务一直停在 `PENDING · 0%`，优先确认 `BACKGROUND_WORKER_ENABLED=true` 且后端容器已重启。
 
 ## 文档
 

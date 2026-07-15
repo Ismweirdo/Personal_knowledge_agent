@@ -80,7 +80,9 @@ class FileIngestionService:
                         chunk_index=index,
                         token_count=max(1, len(str(chunk["content"])) // 4),
                         chunk_metadata={
-                            key: value for key, value in chunk.items() if key != "content"
+                            **{key: value for key, value in chunk.items() if key != "content"},
+                            "source_type": "FILE",
+                            "source_name": filename,
                         },
                     )
                     for index, chunk in enumerate(chunks)

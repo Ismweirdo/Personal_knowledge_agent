@@ -45,6 +45,34 @@ class ExtractionResult(BaseModel):
     relations: list[RelationCandidate] = Field(default_factory=list, max_length=200)
 
 
+ALLOWED_ENTITY_TYPES = {
+    "PERSON",
+    "PROJECT",
+    "TECHNOLOGY",
+    "SKILL",
+    "ROLE",
+    "ORGANIZATION",
+    "EDUCATION",
+    "EXPERIENCE",
+    "CERTIFICATE",
+    "ACHIEVEMENT",
+}
+GENERIC_ENTITY_NAMES = {
+    "项目",
+    "系统",
+    "文档",
+    "用户",
+    "管理员",
+    "知识库",
+    "agent",
+    "api",
+    "backend",
+    "frontend",
+    "前端",
+    "后端",
+}
+
+
 def parse_extraction(content: str) -> ExtractionResult:
     try:
         value = content.strip()
@@ -81,7 +109,11 @@ class GraphExtractionService:
         if chunk is None:
             raise ApplicationError("CHUNK_NOT_FOUND", "Document chunk not found", status_code=404)
         prompt = (
-            "Extract entities and factual relations. Return JSON only with entities and "
+            "Extract only personal-profile knowledge, project facts, skills, roles, education, "
+            "organizations, achievements and evidence-backed relations about the owner or the "
+            "owner's projects. Ignore generic tutorials, API descriptions, boilerplate, UI copy, "
+            "test code and framework concepts unless they are explicitly used in a project or "
+            "experience. Return JSON only with entities and "
             "relations arrays. Entity fields: name, entity_type, summary, confidence. "
             "Relation fields: source, predicate, target, confidence. "
             "Every item needs confidence 0..1.\n<context>" + chunk.content + "</context>"
@@ -100,6 +132,8 @@ class GraphExtractionService:
         )
         entities: dict[str, KnowledgeEntity] = {}
         for item in result.entities:
+            if not _useful_entity(item):
+                continue
             key = normalize_name(item.name)
             entity = await self.session.scalar(
                 select(KnowledgeEntity).where(
@@ -125,6 +159,8 @@ class GraphExtractionService:
             await self._evidence(chunk, entity_id=entity.id)
         relation_count = 0
         for item in result.relations:
+            if not _useful_relation(item):
+                continue
             source, target = (
                 entities.get(normalize_name(item.source)),
                 entities.get(normalize_name(item.target)),
@@ -179,3 +215,27 @@ class GraphExtractionService:
                     quote_hash=hashlib.sha256(chunk.content.encode()).hexdigest(),
                 )
             )
+
+
+def _useful_entity(item: EntityCandidate) -> bool:
+    entity_type = item.entity_type.upper().strip()
+    name = item.name.strip()
+    normalized = normalize_name(name)
+    if entity_type not in ALLOWED_ENTITY_TYPES:
+        return False
+    if len(name) < 2 or len(name) > 80:
+        return False
+    if normalized in GENERIC_ENTITY_NAMES:
+        return False
+    if item.confidence < 0.55:
+        return False
+    return True
+
+
+def _useful_relation(item: RelationCandidate) -> bool:
+    if item.confidence < 0.55:
+        return False
+    if normalize_name(item.source) == normalize_name(item.target):
+        return False
+    predicate = item.predicate.strip()
+    return 1 < len(predicate) <= 40

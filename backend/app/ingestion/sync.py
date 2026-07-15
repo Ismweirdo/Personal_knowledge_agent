@@ -10,10 +10,13 @@ from app.api.schemas import DocumentUploadResponse
 from app.connectors.git import snapshot_repository
 from app.connectors.web import fetch_web, validate_public_url
 from app.infrastructure.config import Settings
+from app.infrastructure.errors import ApplicationError
 from app.infrastructure.models import DocumentChunk, IngestionTask, KnowledgeSource, SourceVersion
 from app.ingestion.parser import ParsedPage, chunk_pages
 from app.ingestion.tasks import enqueue_task
 from app.knowledge_base.service import KnowledgeBaseService
+
+GIT_IMPORT_VERSION = "profile-clean-v2"
 
 
 class SourceSyncService:
@@ -50,13 +53,15 @@ class SourceSyncService:
         self, user_id: str, kb_id: str, repository_path: str
     ) -> DocumentUploadResponse:
         await KnowledgeBaseService(self.session).get(user_id, kb_id)
-        path = await anyio.to_thread.run_sync(lambda: str(Path(repository_path).resolve()))
-        source = await self._source(user_id, kb_id, "GIT", path)
+        source_locator = repository_path.strip()
         snapshot = await anyio.to_thread.run_sync(
-            snapshot_repository, path, self.settings.git_import_root
+            snapshot_repository, source_locator, self.settings.git_import_root
         )
+        path = snapshot.locator
+        source = await self._source(user_id, kb_id, "GIT", path)
         latest = await self._latest(source)
-        if latest is not None and latest.revision == snapshot.revision:
+        revision = f"{snapshot.revision}:{GIT_IMPORT_VERSION}"
+        if latest is not None and latest.revision == revision:
             return await self._response(latest, unchanged=True)
         return await self._persist(
             user_id,
@@ -64,9 +69,38 @@ class SourceSyncService:
             source,
             "GIT",
             path,
-            Path(path).name,
+            snapshot.display_name,
             snapshot.text,
-            revision=snapshot.revision,
+            revision=revision,
+        )
+
+    async def sync_existing(
+        self, user_id: str, kb_id: str, source_id: str
+    ) -> DocumentUploadResponse:
+        await KnowledgeBaseService(self.session).get(user_id, kb_id)
+        source = await self.session.scalar(
+            select(KnowledgeSource).where(
+                KnowledgeSource.id == source_id,
+                KnowledgeSource.user_id == user_id,
+                KnowledgeSource.kb_id == kb_id,
+            )
+        )
+        if source is None:
+            raise ApplicationError(
+                "SOURCE_NOT_FOUND", "Knowledge source not found", status_code=404
+            )
+        if not source.source_locator:
+            raise ApplicationError(
+                "SOURCE_LOCATOR_MISSING", "Source has no sync locator", status_code=409
+            )
+        if source.source_type == "WEB":
+            return await self.sync_web(user_id, kb_id, source.source_locator)
+        if source.source_type == "GIT":
+            return await self.sync_git(user_id, kb_id, source.source_locator)
+        raise ApplicationError(
+            "SOURCE_NOT_SYNCABLE",
+            "Uploaded files cannot be synchronized; upload a new version instead",
+            status_code=422,
         )
 
     async def _persist(
@@ -127,7 +161,12 @@ class SourceSyncService:
                     content=str(chunk["content"]),
                     chunk_index=index,
                     token_count=max(1, len(str(chunk["content"])) // 4),
-                    chunk_metadata={key: value for key, value in chunk.items() if key != "content"},
+                    chunk_metadata={
+                        **{key: value for key, value in chunk.items() if key != "content"},
+                        "source_type": source_type,
+                        "source_name": display_name,
+                        "source_locator": locator,
+                    },
                 )
                 for index, chunk in enumerate(chunks)
             )

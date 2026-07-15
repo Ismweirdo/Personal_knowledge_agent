@@ -6,6 +6,8 @@ services:
       DATABASE_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/knowledge_agent
       REDIS_HOST: redis
       FILE_STORAGE_PATH: /app/uploads
+      BACKGROUND_WORKER_ENABLED: ${BACKGROUND_WORKER_ENABLED:-true}
+      GIT_IMPORT_ROOT: ${GIT_IMPORT_ROOT:-/app/git-imports}
     depends_on:
       postgres:
         condition: service_healthy
@@ -13,6 +15,7 @@ services:
         condition: service_healthy
     volumes:
       - uploads:/app/uploads
+      - ${GIT_IMPORT_HOST_ROOT:-..}:/app/git-imports:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')"]
@@ -26,7 +29,7 @@ services:
       - backend
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost/"]
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -48,11 +51,22 @@ services:
 
   redis:
     image: redis:7-alpine
-    command: ["redis-server", "--appendonly", "yes"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    command: >
+      sh -c 'if [ -n "$$REDIS_PASSWORD" ]; then
+        exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD";
+      else
+        exec redis-server --appendonly yes;
+      fi'
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test:
+        [
+          "CMD-SHELL",
+          'if [ -n "$$REDIS_PASSWORD" ]; then redis-cli -a "$$REDIS_PASSWORD" ping; else redis-cli ping; fi',
+        ]
       interval: 5s
       timeout: 3s
       retries: 10

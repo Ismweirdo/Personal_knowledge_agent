@@ -28,27 +28,36 @@ export async function stream(path, body, onEvent) {
     },
     body: JSON.stringify(body),
   });
-  if (!response.ok) throw new Error("Unable to start conversation");
-  const reader = response.body.getReader(),
-    decoder = new TextDecoder();
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.message || "无法开始生成回答");
+  }
+  if (!response.body) throw new Error("当前浏览器不支持流式回答");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
   let buffer = "";
+  const dispatch = (raw) => {
+    const lines = raw.split(/\r?\n/);
+    const type = lines
+      .find((line) => line.startsWith("event:"))
+      ?.slice(6)
+      .trim();
+    const data = lines
+      .filter((line) => line.startsWith("data:"))
+      .map((line) => line.slice(5).trimStart())
+      .join("\n");
+    if (type && data) onEvent(type, JSON.parse(data));
+  };
   while (true) {
     const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const events = buffer.split("\n\n");
-    buffer = events.pop();
-    for (const raw of events) {
-      const lines = raw.split("\n");
-      const type = lines
-        .find((x) => x.startsWith("event:"))
-        ?.slice(6)
-        .trim();
-      const data = lines
-        .find((x) => x.startsWith("data:"))
-        ?.slice(5)
-        .trim();
-      if (type && data) onEvent(type, JSON.parse(data));
+    if (done) {
+      buffer += decoder.decode();
+      break;
     }
+    buffer += decoder.decode(value, { stream: true });
+    const events = buffer.split(/\r?\n\r?\n/);
+    buffer = events.pop();
+    for (const raw of events) dispatch(raw);
   }
+  if (buffer.trim()) dispatch(buffer);
 }

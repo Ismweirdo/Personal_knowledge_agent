@@ -1,16 +1,26 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, UploadFile, status
+from fastapi import APIRouter, Depends, File, Response, UploadFile, status
 
 from app.api.dependencies import AdminUserId, Session, SettingsDependency
-from app.api.schemas import DocumentUploadResponse, GitSourceRequest, WebSourceRequest
+from app.api.schemas import (
+    BatchDocumentItemResponse,
+    BatchDocumentUploadResponse,
+    DocumentUploadResponse,
+    GitSourceRequest,
+    KnowledgeSourceResponse,
+    WebSourceRequest,
+)
 from app.infrastructure.embedding import EmbeddingClient, get_embedding_client
+from app.infrastructure.errors import ApplicationError
 from app.ingestion.indexing import VectorIndexingService
 from app.ingestion.service import FileIngestionService
+from app.ingestion.source_service import SourceManagementService
 from app.ingestion.sync import SourceSyncService
 
 router = APIRouter(tags=["documents"])
 EmbeddingDependency = Annotated[EmbeddingClient, Depends(get_embedding_client)]
+MAX_BATCH_FILES = 20
 
 
 @router.post(
@@ -26,6 +36,98 @@ async def upload_document(
     user_id: AdminUserId,
 ) -> DocumentUploadResponse:
     return await FileIngestionService(session, settings).upload(user_id, knowledge_base_id, file)
+
+
+@router.post(
+    "/knowledge-bases/{knowledge_base_id}/documents:batch",
+    response_model=BatchDocumentUploadResponse,
+)
+async def upload_documents(
+    knowledge_base_id: str,
+    files: Annotated[list[UploadFile], File()],
+    session: Session,
+    settings: SettingsDependency,
+    user_id: AdminUserId,
+) -> BatchDocumentUploadResponse:
+    if not files or len(files) > MAX_BATCH_FILES:
+        raise ApplicationError(
+            "INVALID_BATCH_SIZE",
+            f"Upload between 1 and {MAX_BATCH_FILES} files at a time",
+            status_code=422,
+        )
+    service = FileIngestionService(session, settings)
+    items: list[BatchDocumentItemResponse] = []
+    for upload in files:
+        filename = upload.filename or "未命名文件"
+        try:
+            result = await service.upload(user_id, knowledge_base_id, upload)
+            items.append(
+                BatchDocumentItemResponse(filename=filename, success=True, result=result)
+            )
+        except ApplicationError as exc:
+            items.append(
+                BatchDocumentItemResponse(
+                    filename=filename,
+                    success=False,
+                    error_code=exc.code,
+                    message=exc.message,
+                )
+            )
+        finally:
+            await upload.close()
+    succeeded = sum(item.success for item in items)
+    return BatchDocumentUploadResponse(
+        total=len(items),
+        succeeded=succeeded,
+        failed=len(items) - succeeded,
+        items=items,
+    )
+
+
+@router.get(
+    "/knowledge-bases/{knowledge_base_id}/sources",
+    response_model=list[KnowledgeSourceResponse],
+)
+async def list_sources(
+    knowledge_base_id: str,
+    session: Session,
+    settings: SettingsDependency,
+    user_id: AdminUserId,
+) -> list[dict[str, object]]:
+    return await SourceManagementService(session, settings).list(user_id, knowledge_base_id)
+
+
+@router.delete(
+    "/knowledge-bases/{knowledge_base_id}/sources/{source_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_source(
+    knowledge_base_id: str,
+    source_id: str,
+    session: Session,
+    settings: SettingsDependency,
+    user_id: AdminUserId,
+) -> Response:
+    await SourceManagementService(session, settings).delete(
+        user_id, knowledge_base_id, source_id
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/knowledge-bases/{knowledge_base_id}/sources/{source_id}:sync",
+    response_model=DocumentUploadResponse,
+)
+async def resync_source(
+    knowledge_base_id: str,
+    source_id: str,
+    session: Session,
+    settings: SettingsDependency,
+    user_id: AdminUserId,
+) -> DocumentUploadResponse:
+    return await SourceSyncService(session, settings).sync_existing(
+        user_id, knowledge_base_id, source_id
+    )
 
 
 @router.post("/sources/{source_id}/index")

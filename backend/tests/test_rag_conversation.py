@@ -4,11 +4,24 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.conversation.service import RagConversationService
+from app.conversation.service import NO_EVIDENCE_ANSWER, RagConversationService
 from app.infrastructure.models import Base, Conversation, KnowledgeBase, Message, User
+from app.retrieval.service import RetrievalResult
 
 
 class FakeRetrieval:
+    async def search(self, user_id: str, kb_id: str, query: str, *, limit: int):
+        return [
+            RetrievalResult(
+                chunk_id="evidence-chunk",
+                content="Verified project evidence",
+                score=0.9,
+                metadata={"source_name": "Resume"},
+            )
+        ]
+
+
+class EmptyRetrieval:
     async def search(self, user_id: str, kb_id: str, query: str, *, limit: int):
         return []
 
@@ -27,6 +40,24 @@ class FailingChat:
     async def stream(self, messages: list[dict[str, str]]) -> AsyncIterator[str]:
         yield "partial"
         raise RuntimeError("upstream disconnected")
+
+
+class UnexpectedChat:
+    model = "unexpected-chat"
+
+    async def stream(self, messages: list[dict[str, str]]) -> AsyncIterator[str]:
+        raise AssertionError("chat model must not be called without evidence")
+        yield "unreachable"
+
+
+class InternalPreambleChat:
+    model = "preamble-chat"
+
+    async def stream(self, messages: list[dict[str, str]]) -> AsyncIterator[str]:
+        assert "Context:" not in messages[-1]["content"]
+        yield "根据"
+        yield " Context，"
+        yield "雷明康做过两个项目。"
 
 
 @pytest.fixture
@@ -95,3 +126,46 @@ async def test_failed_stream_persists_partial_answer_and_failed_status(session) 
     assert assistant is not None
     assert assistant.status == "FAILED"
     assert assistant.content == "partial"
+
+
+@pytest.mark.asyncio
+async def test_empty_retrieval_returns_deterministic_answer_without_model(session) -> None:
+    user_id, conversation_id = await seed_conversation(session)
+    service = RagConversationService(session, EmptyRetrieval(), UnexpectedChat())
+
+    events = [event async for event in service.stream(user_id, conversation_id, "unknown")]
+    assistant = await session.scalar(
+        select(Message).where(
+            Message.conversation_id == conversation_id, Message.role == "assistant"
+        )
+    )
+
+    assert [event.splitlines()[0] for event in events] == [
+        "event: metadata",
+        "event: citation",
+        "event: delta",
+        "event: done",
+    ]
+    assert NO_EVIDENCE_ANSWER in events[2]
+    assert assistant is not None
+    assert assistant.status == "COMPLETED"
+    assert assistant.content == NO_EVIDENCE_ANSWER
+
+
+@pytest.mark.asyncio
+async def test_stream_removes_internal_retrieval_preamble(session) -> None:
+    user_id, conversation_id = await seed_conversation(session)
+    service = RagConversationService(session, FakeRetrieval(), InternalPreambleChat())
+
+    events = [event async for event in service.stream(user_id, conversation_id, "做过哪些项目？")]
+    assistant = await session.scalar(
+        select(Message).where(
+            Message.conversation_id == conversation_id, Message.role == "assistant"
+        )
+    )
+
+    deltas = [event for event in events if event.startswith("event: delta")]
+    assert len(deltas) == 1
+    assert "Context" not in deltas[0]
+    assert assistant is not None
+    assert assistant.content == "雷明康做过两个项目。"
