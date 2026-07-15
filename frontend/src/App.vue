@@ -53,8 +53,6 @@ const pendingFiles = ref([]);
 const selectedFileSourceIds = ref([]);
 const fileInput = ref(null);
 const candidates = ref({ entities: [], relations: [] });
-const graphData = ref({ nodes: [], edges: [] });
-const reviews = ref([]);
 const visitorFeedback = ref([]);
 const notice = ref("");
 
@@ -77,22 +75,8 @@ const allVisibleFilesSelected = computed(
       selectedFileSourceIds.value.includes(item.id),
     ),
 );
-const graphNodes = computed(() => {
-  const total = Math.max(graphData.value.nodes.length, 1);
-  const cx = 360;
-  const cy = 190;
-  const radius = total > 8 ? 145 : 115;
-  return graphData.value.nodes.map((node, index) => {
-    const angle = (Math.PI * 2 * index) / total - Math.PI / 2;
-    return {
-      ...node,
-      x: cx + Math.cos(angle) * radius,
-      y: cy + Math.sin(angle) * radius,
-    };
-  });
-});
-const graphNodeById = computed(() =>
-  Object.fromEntries(graphNodes.value.map((node) => [node.id, node])),
+const candidateCount = computed(
+  () => candidates.value.entities.length + candidates.value.relations.length,
 );
 
 marked.use({ breaks: true, gfm: true });
@@ -330,9 +314,8 @@ async function loadAdmin() {
   knowledgeBases.value = await api("/knowledge-bases");
   selectedKb.value ||= knowledgeBases.value[0]?.id || "";
   if (selectedKb.value) {
-    [candidates.value, graphData.value, sources.value] = await Promise.all([
+    [candidates.value, sources.value] = await Promise.all([
       api(`/knowledge-bases/${selectedKb.value}/knowledge-candidates`),
-      api(`/knowledge-bases/${selectedKb.value}/graph`),
       api(`/knowledge-bases/${selectedKb.value}/sources`),
     ]);
     selectedFileSourceIds.value = selectedFileSourceIds.value.filter((id) =>
@@ -342,23 +325,22 @@ async function loadAdmin() {
     );
   } else {
     sources.value = [];
+    candidates.value = { entities: [], relations: [] };
   }
-  reviews.value = await api("/admin/learning/review-tasks?include_future=true");
   visitorFeedback.value = await api("/conversations/feedback");
 }
 
 async function clearKnowledge() {
   if (!selectedKb.value) return;
   const ok = confirm(
-    "确定清空当前知识库的所有导入内容、Chunk、向量和知识图谱吗？知识库本身会保留。",
+    "确定清空当前知识库的所有导入内容、Chunk 和向量吗？知识库本身会保留。",
   );
   if (!ok) return;
   const result = await api(`/knowledge-bases/${selectedKb.value}/contents`, {
     method: "DELETE",
   });
-  notice.value = `已清空：${result.sources} 个来源、${result.chunks} 个分块、${result.entities} 个实体、${result.relations} 条关系。`;
+  notice.value = `已清空：${result.sources} 个来源、${result.chunks} 个分块。`;
   candidates.value = { entities: [], relations: [] };
-  graphData.value = { nodes: [], edges: [] };
   await loadAdmin();
 }
 
@@ -575,12 +557,7 @@ async function trackTask(taskId) {
     const task = await api(`/admin/tasks/${taskId}`);
     notice.value = `入库任务 ${task.status} · ${task.progress}%`;
     if (task.status === "SUCCEEDED") {
-      if (task.errorCode || task.error_code) {
-        notice.value =
-          "问答知识已入库完成，图谱候选抽取部分跳过或失败，可稍后手动补充审核。";
-      } else {
-        notice.value = "入库完成，问答知识和候选知识已更新。";
-      }
+      notice.value = "入库完成，问答知识已更新。";
       await loadAdmin();
       return;
     }
@@ -597,14 +574,6 @@ async function review(type, id, action) {
   await api(`/knowledge-candidates/${type}/${id}:${action}`, {
     method: "POST",
     body: "{}",
-  });
-  await loadAdmin();
-}
-
-async function grade(entityId, gradeValue) {
-  await api(`/admin/learning/entities/${entityId}/review`, {
-    method: "POST",
-    body: JSON.stringify({ grade: gradeValue }),
   });
   await loadAdmin();
 }
@@ -673,12 +642,6 @@ onMounted(loadUser);
         >
           <BookOpen />知识库
         </button>
-        <button :class="{ active: tab === 'review' }" @click="tab = 'review'">
-          <RefreshCw />复习
-        </button>
-        <button :class="{ active: tab === 'graph' }" @click="tab = 'graph'">
-          <Brain />图谱
-        </button>
         <button
           :class="{ active: tab === 'feedback' }"
           @click="tab = 'feedback'"
@@ -686,6 +649,53 @@ onMounted(loadUser);
           <MessageSquare />评论
         </button>
       </nav>
+      <section v-if="isAdmin" class="admin-review-sidebar">
+        <header>
+          <span>候选知识审核</span>
+          <b>{{ candidateCount }}</b>
+        </header>
+        <div v-if="candidateCount" class="candidate-list">
+          <article v-for="e in candidates.entities" :key="e.id">
+            <div>
+              <strong>{{ e.name }}</strong>
+              <small
+                >{{ e.type }} · {{ Math.round(e.confidence * 100) }}%</small
+              >
+            </div>
+            <div class="candidate-actions">
+              <button title="通过" @click="review('entities', e.id, 'accept')">
+                通过
+              </button>
+              <button
+                class="danger"
+                title="拒绝"
+                @click="review('entities', e.id, 'reject')"
+              >
+                拒绝
+              </button>
+            </div>
+          </article>
+          <article v-for="r in candidates.relations" :key="r.id">
+            <div>
+              <strong>{{ r.predicate }}</strong>
+              <small>关系 · {{ Math.round(r.confidence * 100) }}%</small>
+            </div>
+            <div class="candidate-actions">
+              <button title="通过" @click="review('relations', r.id, 'accept')">
+                通过
+              </button>
+              <button
+                class="danger"
+                title="拒绝"
+                @click="review('relations', r.id, 'reject')"
+              >
+                拒绝
+              </button>
+            </div>
+          </article>
+        </div>
+        <p v-else>暂无待审核候选。</p>
+      </section>
       <nav v-else>
         <button class="active"><MessageSquare />对话</button>
       </nav>
@@ -819,25 +829,13 @@ onMounted(loadUser);
       <header>
         <div>
           <h2>
-            {{
-              tab === "knowledge"
-                ? "知识库管理"
-                : tab === "review"
-                  ? "学习复习"
-                  : tab === "graph"
-                    ? "知识图谱"
-                    : "访客评论"
-            }}
+            {{ tab === "knowledge" ? "知识库管理" : "访客评论" }}
           </h2>
           <p>
             {{
               tab === "knowledge"
                 ? "维护公开 Agent 背后的个人知识资产。"
-                : tab === "review"
-                  ? "按复习计划巩固已抽取的知识实体。"
-                  : tab === "graph"
-                    ? "查看项目、技能、经历之间的结构化关系。"
-                    : "查看访客基于岗位给出的建议。"
+                : "查看访客基于岗位给出的建议。"
             }}
           </p>
         </div>
@@ -1022,140 +1020,7 @@ onMounted(loadUser);
             </table>
           </div>
         </section>
-        <section class="table-section">
-          <h3>候选知识审核</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>名称 / 关系</th>
-                <th>置信度</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="e in candidates.entities" :key="e.id">
-                <td>
-                  {{ e.name }} <small>{{ e.type }}</small>
-                </td>
-                <td>{{ Math.round(e.confidence * 100) }}%</td>
-                <td>
-                  <button @click="review('entities', e.id, 'accept')">
-                    通过
-                  </button>
-                  <button
-                    class="danger"
-                    @click="review('entities', e.id, 'reject')"
-                  >
-                    拒绝
-                  </button>
-                </td>
-              </tr>
-              <tr v-for="r in candidates.relations" :key="r.id">
-                <td>{{ r.predicate }}</td>
-                <td>{{ Math.round(r.confidence * 100) }}%</td>
-                <td>
-                  <button @click="review('relations', r.id, 'accept')">
-                    通过
-                  </button>
-                  <button
-                    class="danger"
-                    @click="review('relations', r.id, 'reject')"
-                  >
-                    拒绝
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </section>
       </template>
-
-      <section v-else-if="tab === 'review'" class="table-section">
-        <table>
-          <thead>
-            <tr>
-              <th>知识</th>
-              <th>掌握度</th>
-              <th>间隔</th>
-              <th>到期</th>
-              <th>评分</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="r in reviews" :key="r.id">
-              <td>{{ r.entityName }}</td>
-              <td>{{ Math.round(r.mastery * 100) }}%</td>
-              <td>{{ r.intervalDays }} 天</td>
-              <td>{{ new Date(r.dueAt).toLocaleDateString() }}</td>
-              <td class="grade-actions">
-                <button
-                  v-for="gradeValue in [1, 2, 3, 4, 5]"
-                  :key="gradeValue"
-                  @click="grade(r.entityId, gradeValue)"
-                >
-                  {{ gradeValue }}
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </section>
-
-      <section v-else-if="tab === 'graph'" class="graph-panel">
-        <div v-if="!graphData.nodes.length" class="empty-graph">
-          <div class="bear-blob tiny">
-            <span class="ear left"></span><span class="ear right"></span>
-            <span class="eye left"></span><span class="eye right"></span>
-            <span class="nose"></span>
-          </div>
-          <h3>暂无可视化图谱</h3>
-          <p>重新导入简历、项目或网页后，候选知识会在这里形成节点与关系。</p>
-        </div>
-        <svg v-else viewBox="0 0 720 380" role="img" aria-label="知识图谱">
-          <line
-            v-for="edge in graphData.edges"
-            :key="edge.id"
-            :x1="graphNodeById[edge.source]?.x"
-            :y1="graphNodeById[edge.source]?.y"
-            :x2="graphNodeById[edge.target]?.x"
-            :y2="graphNodeById[edge.target]?.y"
-            class="graph-edge"
-          />
-          <text
-            v-for="edge in graphData.edges"
-            :key="`${edge.id}-label`"
-            :x="
-              ((graphNodeById[edge.source]?.x || 0) +
-                (graphNodeById[edge.target]?.x || 0)) /
-              2
-            "
-            :y="
-              ((graphNodeById[edge.source]?.y || 0) +
-                (graphNodeById[edge.target]?.y || 0)) /
-              2
-            "
-            class="graph-edge-label"
-          >
-            {{ edge.label }}
-          </text>
-          <g v-for="node in graphNodes" :key="node.id">
-            <circle
-              :cx="node.x"
-              :cy="node.y"
-              r="28"
-              :class="['graph-node', node.status.toLowerCase()]"
-            />
-            <text
-              :x="node.x"
-              :y="node.y + 45"
-              text-anchor="middle"
-              class="graph-label"
-            >
-              {{ node.label.slice(0, 12) }}
-            </text>
-          </g>
-        </svg>
-      </section>
 
       <section v-else class="table-section">
         <table>
