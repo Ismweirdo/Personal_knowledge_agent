@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Response, status
 from fastapi.responses import StreamingResponse
 
-from app.api.dependencies import AdminUserId, CurrentUserId, Session
+from app.api.dependencies import CurrentUserId, Session
 from app.api.schemas import (
     ChatRequest,
     ConversationCreate,
@@ -60,7 +60,7 @@ async def create_feedback(
 
 
 @router.get("/feedback", response_model=list[VisitorFeedbackResponse])
-async def list_feedback(_: AdminUserId, service: Service) -> list[object]:
+async def list_feedback(_: CurrentUserId, service: Service) -> list[object]:
     return await service.list_feedback()
 
 

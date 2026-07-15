@@ -67,6 +67,40 @@ class DocumentUploadResponse(BaseModel):
     task_id: str | None = None
 
 
+class BatchDocumentItemResponse(BaseModel):
+    filename: str
+    success: bool
+    result: DocumentUploadResponse | None = None
+    error_code: str | None = None
+    message: str | None = None
+
+
+class BatchDocumentUploadResponse(BaseModel):
+    total: int
+    succeeded: int
+    failed: int
+    items: list[BatchDocumentItemResponse]
+
+
+class KnowledgeSourceResponse(BaseModel):
+    id: str
+    knowledge_base_id: str
+    source_type: str
+    display_name: str
+    source_locator: str | None
+    status: str
+    active_version_id: str | None
+    latest_version_id: str | None
+    latest_version_status: str | None
+    version_count: int
+    chunk_count: int
+    size_bytes: int | None
+    task_status: str | None
+    task_progress: int | None
+    last_synced_at: datetime | None
+    created_at: datetime
+
+
 class IngestionTaskResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

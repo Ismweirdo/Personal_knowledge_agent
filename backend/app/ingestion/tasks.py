@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import or_, select
@@ -13,12 +14,13 @@ from app.infrastructure.models import DocumentChunk, IngestionTask, SourceVersio
 from app.ingestion.indexing import VectorIndexingService
 from app.knowledge_graph.extraction import GraphExtractionService
 
+logger = logging.getLogger(__name__)
+
 TRANSIENT_CODES = {
     "EMBEDDING_RATE_LIMITED",
     "EMBEDDING_UNAVAILABLE",
     "LLM_RATE_LIMITED",
     "LLM_UNAVAILABLE",
-    "GRAPH_EXTRACTION_INVALID",
 }
 
 
@@ -86,28 +88,76 @@ class IngestionWorker:
                     )
                 task.progress = 70
                 await session.commit()
-                chunks = list(
-                    await session.scalars(
-                        select(DocumentChunk)
-                        .where(DocumentChunk.source_version_id == task.source_version_id)
-                        .order_by(DocumentChunk.chunk_index)
+                graph_warning = await self._extract_graph_candidates(session, task)
+                task = await session.get(IngestionTask, task_id)
+                if task is None:
+                    raise ApplicationError(
+                        "INGESTION_TASK_NOT_FOUND",
+                        "Ingestion task not found",
+                        status_code=404,
                     )
-                )
-                extractor = GraphExtractionService(session, self.chat)
-                for index, chunk in enumerate(chunks, 1):
-                    await extractor.extract_chunk(task.user_id, chunk.id)
-                    task.progress = 70 + round(index / len(chunks) * 30)
                 task.status = "SUCCEEDED"
                 task.progress = 100
                 task.finished_at = datetime.now(UTC)
-                task.error_code = None
-                task.error_message = None
+                task.error_code = graph_warning
+                task.error_message = (
+                    "Vector indexing completed; graph extraction was skipped or partially failed"
+                    if graph_warning
+                    else None
+                )
                 await session.commit()
             except Exception as exc:
                 await session.rollback()
                 task = await session.get(IngestionTask, task_id)
                 await self._fail(session, task, exc)
             return True
+
+    async def _extract_graph_candidates(
+        self, session: AsyncSession, task: IngestionTask
+    ) -> str | None:
+        task_id = task.id
+        user_id = task.user_id
+        source_version_id = task.source_version_id
+        if not self.settings.graph_extraction_enabled:
+            return "GRAPH_EXTRACTION_SKIPPED"
+        max_chunks = self.settings.graph_extraction_max_chunks_per_task
+        if max_chunks <= 0:
+            return "GRAPH_EXTRACTION_SKIPPED"
+        chunks = list(
+            await session.scalars(
+                select(DocumentChunk)
+                .where(DocumentChunk.source_version_id == source_version_id)
+                .order_by(DocumentChunk.chunk_index)
+                .limit(max_chunks + 1)
+            )
+        )
+        if not chunks:
+            return None
+        selected_chunks = chunks[:max_chunks]
+        total_selected = len(selected_chunks)
+        extractor = GraphExtractionService(session, self.chat)
+        warning: str | None = "GRAPH_EXTRACTION_PARTIAL" if len(chunks) > max_chunks else None
+        for index, chunk in enumerate(selected_chunks, 1):
+            chunk_id = chunk.id
+            try:
+                await extractor.extract_chunk(user_id, chunk_id)
+            except Exception as exc:  # noqa: BLE001 - graph extraction must not block indexing
+                await session.rollback()
+                warning = (
+                    exc.code
+                    if isinstance(exc, ApplicationError)
+                    else "GRAPH_EXTRACTION_FAILED"
+                )
+                logger.warning(
+                    "graph_extraction_failed taskId=%s chunkId=%s errorCode=%s",
+                    task_id,
+                    chunk_id,
+                    warning,
+                )
+                break
+            task.progress = 70 + round(index / total_selected * 25)
+            await session.commit()
+        return warning
 
     async def _claim(self, session: AsyncSession) -> IngestionTask | None:
         now = datetime.now(UTC)

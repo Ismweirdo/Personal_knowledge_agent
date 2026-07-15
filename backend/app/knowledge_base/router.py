@@ -39,3 +39,12 @@ async def delete_knowledge_base(
 ) -> Response:
     await KnowledgeBaseService(session).delete(user_id, knowledge_base_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete("/{knowledge_base_id}/contents")
+async def clear_knowledge_base_contents(
+    knowledge_base_id: str,
+    session: Session,
+    user_id: AdminUserId,
+) -> dict[str, int | str]:
+    return await KnowledgeBaseService(session).clear_contents(user_id, knowledge_base_id)

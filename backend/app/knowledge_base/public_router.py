@@ -13,7 +13,7 @@ async def get_public_agent(session: Session) -> dict[str, str | None]:
     knowledge_base = await session.scalar(
         select(KnowledgeBase)
         .where(KnowledgeBase.is_published.is_(True))
-        .order_by(KnowledgeBase.created_at)
+        .order_by(KnowledgeBase.updated_at.desc(), KnowledgeBase.created_at.desc())
         .limit(1)
     )
     if knowledge_base is None:

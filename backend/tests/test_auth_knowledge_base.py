@@ -5,6 +5,7 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from app.connectors.web import WebSnapshot
 from app.infrastructure.config import Settings, get_settings
 from app.infrastructure.database import get_session
 from app.infrastructure.embedding import get_embedding_client
@@ -256,6 +257,127 @@ async def test_failed_upload_does_not_leave_stored_file(client: AsyncClient, tmp
     assert response.status_code == 415
     upload_root = tmp_path / "uploads"
     assert not upload_root.exists() or not any(upload_root.rglob("*.*"))
+
+
+@pytest.mark.asyncio
+async def test_batch_upload_lists_and_deletes_selected_sources(
+    client: AsyncClient, tmp_path
+) -> None:
+    token = await admin_token(client)
+    headers = {"Authorization": f"Bearer {token}"}
+    knowledge_base = await client.post(
+        "/api/v1/knowledge-bases", headers=headers, json={"name": "Batch sources"}
+    )
+    kb_id = knowledge_base.json()["id"]
+
+    uploaded = await client.post(
+        f"/api/v1/knowledge-bases/{kb_id}/documents:batch",
+        headers=headers,
+        files=[
+            ("files", ("resume.md", b"Project experience and Java", "text/markdown")),
+            ("files", ("notes.txt", b"FastAPI learning notes", "text/plain")),
+            ("files", ("secret.env", b"SECRET=hidden", "text/plain")),
+        ],
+    )
+
+    assert uploaded.status_code == 200
+    assert uploaded.json()["succeeded"] == 2
+    assert uploaded.json()["failed"] == 1
+    listed = await client.get(
+        f"/api/v1/knowledge-bases/{kb_id}/sources", headers=headers
+    )
+    assert listed.status_code == 200
+    assert {item["display_name"] for item in listed.json()} == {"resume.md", "notes.txt"}
+    assert all(item["source_type"] == "FILE" for item in listed.json())
+
+    source_id = listed.json()[0]["id"]
+    deleted = await client.delete(
+        f"/api/v1/knowledge-bases/{kb_id}/sources/{source_id}", headers=headers
+    )
+    assert deleted.status_code == 204
+    after_delete = await client.get(
+        f"/api/v1/knowledge-bases/{kb_id}/sources", headers=headers
+    )
+    assert len(after_delete.json()) == 1
+    stored_files = list((tmp_path / "uploads").rglob("*.*"))
+    assert len(stored_files) == 1
+
+
+@pytest.mark.asyncio
+async def test_web_source_can_be_refreshed_and_deleted(
+    client: AsyncClient, monkeypatch
+) -> None:
+    calls = 0
+
+    async def fake_fetch(url: str, **kwargs):
+        nonlocal calls
+        calls += 1
+        return WebSnapshot(
+            url=url,
+            text=f"Personal project update version {calls}",
+            etag=f'"v{calls}"',
+            last_modified=None,
+        )
+
+    monkeypatch.setattr("app.ingestion.sync.fetch_web", fake_fetch)
+    token = await admin_token(client)
+    headers = {"Authorization": f"Bearer {token}"}
+    knowledge_base = await client.post(
+        "/api/v1/knowledge-bases", headers=headers, json={"name": "Web sources"}
+    )
+    kb_id = knowledge_base.json()["id"]
+    created = await client.post(
+        f"/api/v1/knowledge-bases/{kb_id}/sources:web",
+        headers=headers,
+        json={"url": "https://example.com/profile"},
+    )
+    source_id = created.json()["source_id"]
+
+    refreshed = await client.post(
+        f"/api/v1/knowledge-bases/{kb_id}/sources/{source_id}:sync",
+        headers=headers,
+    )
+    assert refreshed.status_code == 200
+    assert refreshed.json()["version_id"] != created.json()["version_id"]
+    listed = await client.get(
+        f"/api/v1/knowledge-bases/{kb_id}/sources", headers=headers
+    )
+    assert listed.json()[0]["source_type"] == "WEB"
+    assert listed.json()[0]["version_count"] == 2
+
+    deleted = await client.delete(
+        f"/api/v1/knowledge-bases/{kb_id}/sources/{source_id}", headers=headers
+    )
+    assert deleted.status_code == 204
+    listed = await client.get(
+        f"/api/v1/knowledge-bases/{kb_id}/sources", headers=headers
+    )
+    assert listed.json() == []
+
+
+@pytest.mark.asyncio
+async def test_publishing_one_knowledge_base_unpublishes_the_previous_one(
+    client: AsyncClient,
+) -> None:
+    token = await admin_token(client)
+    headers = {"Authorization": f"Bearer {token}"}
+    first = await client.post(
+        "/api/v1/knowledge-bases",
+        headers=headers,
+        json={"name": "First published", "is_published": True},
+    )
+    second = await client.post(
+        "/api/v1/knowledge-bases",
+        headers=headers,
+        json={"name": "Second published", "is_published": True},
+    )
+
+    public_agent = await client.get("/api/v1/agent")
+    listed = await client.get("/api/v1/knowledge-bases", headers=headers)
+    states = {item["id"]: item["is_published"] for item in listed.json()}
+    assert public_agent.json()["knowledgeBaseId"] == second.json()["id"]
+    assert states[first.json()["id"]] is False
+    assert states[second.json()["id"]] is True
 
 
 @pytest.mark.asyncio

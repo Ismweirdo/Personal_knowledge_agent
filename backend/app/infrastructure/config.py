@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     background_worker_enabled: bool = False
     background_worker_poll_seconds: float = 2.0
     background_task_stale_seconds: int = 300
+    graph_extraction_enabled: bool = True
+    graph_extraction_max_chunks_per_task: int = 20
     admin_username: str | None = None
     admin_password: str | None = None
     visitor_access_key: str | None = None
