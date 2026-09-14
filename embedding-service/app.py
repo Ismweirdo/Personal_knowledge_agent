@@ -6,6 +6,7 @@ from time import time
 import numpy as np
 from fastapi import FastAPI, HTTPException
 from FlagEmbedding import BGEM3FlagModel
+from huggingface_hub import snapshot_download
 from pydantic import BaseModel, Field
 
 MODEL_NAME = os.getenv("MODEL_NAME", "BAAI/bge-m3")
@@ -28,7 +29,12 @@ state = ServiceState()
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    state.model = BGEM3FlagModel(MODEL_NAME, use_fp16=False, cache_dir=MODEL_CACHE_DIR)
+    model_path = snapshot_download(
+        repo_id=MODEL_NAME,
+        cache_dir=MODEL_CACHE_DIR,
+        ignore_patterns=["imgs/*", "*.jpg", "*.webp"],
+    )
+    state.model = BGEM3FlagModel(model_path, use_fp16=False, cache_dir=MODEL_CACHE_DIR)
     yield
     state.model = None
 
