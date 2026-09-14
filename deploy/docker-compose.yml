@@ -50,6 +50,7 @@ services:
       MODEL_CACHE_DIR: /models
       EMBEDDING_BATCH_SIZE: 4
       HF_ENDPOINT: ${HF_ENDPOINT:-https://hf-mirror.com}
+      HF_HUB_DISABLE_XET: "1"
     volumes:
       - embedding_models:/models
     healthcheck:
