@@ -6,12 +6,21 @@ services:
       DATABASE_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/knowledge_agent
       REDIS_HOST: redis
       FILE_STORAGE_PATH: /app/uploads
+      EMBEDDING_PROVIDER: openai
+      EMBEDDING_MODEL: bge-m3
+      EMBEDDING_API_KEY: local-embedding-service
+      EMBEDDING_BASE_URL: http://embedding:8001/v1
+      EMBEDDING_DIMENSIONS: 1024
+      EMBEDDING_BATCH_SIZE: 4
+      EMBEDDING_REQUEST_TIMEOUT_SECONDS: 300
       BACKGROUND_WORKER_ENABLED: ${BACKGROUND_WORKER_ENABLED:-true}
       GIT_IMPORT_ROOT: ${GIT_IMPORT_ROOT:-/app/git-imports}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      embedding:
         condition: service_healthy
     volumes:
       - uploads:/app/uploads
@@ -33,6 +42,22 @@ services:
       interval: 15s
       timeout: 5s
       retries: 5
+
+  embedding:
+    build: ../embedding-service
+    environment:
+      MODEL_NAME: BAAI/bge-m3
+      MODEL_CACHE_DIR: /models
+      EMBEDDING_BATCH_SIZE: 4
+    volumes:
+      - embedding_models:/models
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 15m
+    restart: unless-stopped
 
   postgres:
     image: pgvector/pgvector:pg16
@@ -87,3 +112,4 @@ volumes:
   postgres_data:
   redis_data:
   uploads:
+  embedding_models:

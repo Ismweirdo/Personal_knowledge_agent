@@ -34,13 +34,26 @@ uvicorn app.main:app --reload
 ```env
 EMBEDDING_BASE_URL=https://models.github.ai/inference
 EMBEDDING_MODEL=openai/text-embedding-3-small
-EMBEDDING_DIMENSIONS=1536
+EMBEDDING_PROVIDER=ollama
+EMBEDDING_MODEL=bge-m3
+EMBEDDING_BASE_URL=http://localhost:11434
+EMBEDDING_DIMENSIONS=1024
 EMBEDDING_API_KEY=your-fine-grained-token
 BACKGROUND_WORKER_ENABLED=true
 ADMIN_USERNAME=your-admin-name
 ADMIN_PASSWORD=your-admin-password
 VISITOR_ACCESS_KEY=your-visitor-access-key
 ```
+
+Docker Compose 默认启动独立的 FastAPI Embedding 服务，内部使用 `BAAI/bge-m3`/FlagEmbedding 并提供 OpenAI 兼容接口；模型首次启动会下载到 `embedding_models` 卷。服务内网络地址为 `http://embedding:8001/v1`，不需要第三方 API Key。
+
+Ollama 的 `bge-m3` 保留为本地开发或故障回退：
+
+```bash
+ollama pull bge-m3
+```
+
+需要使用 Ollama 回退时，将 `EMBEDDING_PROVIDER=ollama`、`EMBEDDING_BASE_URL=http://host.docker.internal:11434`。首次切换到 BGE-M3 或切换提供方后执行 `alembic upgrade head` 和 `python scripts/reindex_embeddings.py`，以重建原有向量。
 
 ## 测试
 

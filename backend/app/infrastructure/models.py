@@ -131,7 +131,7 @@ class DocumentChunk(Base):
     chunk_index: Mapped[int] = mapped_column()
     token_count: Mapped[int] = mapped_column()
     chunk_metadata: Mapped[dict[str, object] | None] = mapped_column(JSON)
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(1536))
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(1024))
 
 
 class KnowledgeEntity(Base):

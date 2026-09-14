@@ -16,7 +16,7 @@ from app.main import create_app
 
 class FakeEmbeddingClient:
     async def embed(self, texts: list[str]) -> list[list[float]]:
-        return [[0.0] * 1536 for _ in texts]
+        return [[0.0] * 1024 for _ in texts]
 
 
 @pytest_asyncio.fixture

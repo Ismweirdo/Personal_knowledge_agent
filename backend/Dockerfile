@@ -18,6 +18,8 @@ ENV PIP_DEFAULT_TIMEOUT=120
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 COPY pyproject.toml ./
 COPY app ./app
+COPY scripts ./scripts
+COPY evaluation ./evaluation
 COPY alembic.ini ./
 COPY alembic ./alembic
 RUN python -m pip install --no-cache-dir --upgrade pip setuptools wheel hatchling \

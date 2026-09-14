@@ -52,8 +52,9 @@ class VectorIndexingService:
         version.status = "INDEXING"
         await self.session.flush()
         try:
-            for start in range(0, len(chunks), 32):
-                batch = chunks[start : start + 32]
+            batch_size = getattr(self.embedding_client, "batch_size", 32)
+            for start in range(0, len(chunks), batch_size):
+                batch = chunks[start : start + batch_size]
                 vectors = await self.embedding_client.embed([chunk.content for chunk in batch])
                 if len(vectors) != len(batch):
                     raise ApplicationError(

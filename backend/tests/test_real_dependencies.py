@@ -24,7 +24,7 @@ ALEMBIC_HEAD = ScriptDirectory.from_config(Config("alembic.ini")).get_current_he
 
 class FakeEmbedding:
     async def embed(self, texts: list[str]) -> list[list[float]]:
-        vector = [0.0] * 1536
+        vector = [0.0] * 1024
         vector[0] = 1.0
         return [vector.copy() for _ in texts]
 
@@ -70,9 +70,9 @@ async def test_pgvector_migrations_retrieval_and_redis() -> None:
         session.add(version)
         await session.flush()
         source.active_version_id = version.id
-        near = [0.0] * 1536
+        near = [0.0] * 1024
         near[0] = 1.0
-        far = [0.0] * 1536
+        far = [0.0] * 1024
         far[1] = 1.0
         session.add_all(
             [

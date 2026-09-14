@@ -1,6 +1,8 @@
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 
 from app.infrastructure.config import Settings
@@ -34,3 +36,26 @@ async def test_embedding_response_is_ordered_by_index() -> None:
 
     assert result == [[1.0, 0.0], [0.0, 1.0]]
     create.assert_awaited_once_with(model="test-embedding", input=["first", "second"], dimensions=2)
+
+
+@pytest.mark.asyncio
+async def test_ollama_embedding_uses_local_endpoint() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/embed"
+        assert json.loads(request.content) == {
+            "model": "bge-m3",
+            "input": ["first", "second"],
+            "truncate": False,
+        }
+        return httpx.Response(200, json={"embeddings": [[1.0, 0.0], [0.0, 1.0]]})
+
+    client = EmbeddingClient(
+        client=httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://ollama"),
+        model="bge-m3",
+        dimensions=2,
+        provider="ollama",
+    )
+    try:
+        assert await client.embed(["first", "second"]) == [[1.0, 0.0], [0.0, 1.0]]
+    finally:
+        await client.client.aclose()

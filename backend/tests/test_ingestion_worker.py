@@ -22,7 +22,7 @@ from app.ingestion.tasks import IngestionWorker
 
 class FakeEmbedding:
     async def embed(self, texts: list[str]) -> list[list[float]]:
-        vector = [0.0] * 1536
+        vector = [0.0] * 1024
         vector[0] = 1.0
         return [vector.copy() for _ in texts]
 

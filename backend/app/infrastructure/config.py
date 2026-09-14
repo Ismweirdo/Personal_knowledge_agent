@@ -17,10 +17,13 @@ class Settings(BaseSettings):
     llm_api_key: str | None = None
     llm_base_url: str = "https://api.deepseek.com"
     chat_model: str = "deepseek-chat"
+    embedding_provider: str = "openai"
     embedding_model: str | None = None
     embedding_api_key: str | None = None
     embedding_base_url: str | None = None
-    embedding_dimensions: int = 1536
+    embedding_dimensions: int = 1024
+    embedding_batch_size: int = 32
+    embedding_request_timeout_seconds: float = 30.0
     file_storage_path: str = "uploads"
     max_upload_bytes: int = 20 * 1024 * 1024
     web_crawl_user_agent: str = "PersonalKnowledgeAgent/0.1"
@@ -45,7 +48,11 @@ class Settings(BaseSettings):
             raise ValueError("JWT_SECRET must be replaced in production")
         if not self.llm_api_key:
             raise ValueError("LLM_API_KEY is required in production")
-        if not self.embedding_api_key or not self.embedding_model:
+        if self.embedding_provider not in {"openai", "ollama"}:
+            raise ValueError("EMBEDDING_PROVIDER must be openai or ollama")
+        if not self.embedding_model:
+            raise ValueError("Embedding provider is required in production")
+        if self.embedding_provider == "openai" and not self.embedding_api_key:
             raise ValueError("Embedding provider is required in production")
         if not self.rate_limit_enabled:
             raise ValueError("RATE_LIMIT_ENABLED must be true in production")
