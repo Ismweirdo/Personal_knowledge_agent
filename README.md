@@ -47,6 +47,8 @@ VISITOR_ACCESS_KEY=your-visitor-access-key
 
 Docker Compose 默认启动独立的 FastAPI Embedding 服务，内部使用 `BAAI/bge-m3`/FlagEmbedding 并提供 OpenAI 兼容接口；模型首次启动会下载到 `embedding_models` 卷。服务内网络地址为 `http://embedding:8001/v1`，不需要第三方 API Key。
 
+首次下载 BGE-M3 时会读取 `HF_ENDPOINT`；默认使用 `https://hf-mirror.com`，以适配无法直连 Hugging Face 的网络。可以在 `.env` 中改为可访问的模型镜像，直连可用时设为 `https://huggingface.co`。
+
 Ollama 的 `bge-m3` 保留为本地开发或故障回退：
 
 ```bash

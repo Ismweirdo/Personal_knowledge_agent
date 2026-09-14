@@ -49,6 +49,7 @@ services:
       MODEL_NAME: BAAI/bge-m3
       MODEL_CACHE_DIR: /models
       EMBEDDING_BATCH_SIZE: 4
+      HF_ENDPOINT: ${HF_ENDPOINT:-https://hf-mirror.com}
     volumes:
       - embedding_models:/models
     healthcheck:
