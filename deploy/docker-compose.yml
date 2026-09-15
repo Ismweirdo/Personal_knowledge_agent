@@ -3,7 +3,6 @@ services:
     build: ../backend
     env_file: ../.env
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/knowledge_agent
       REDIS_HOST: redis
       FILE_STORAGE_PATH: /app/uploads
       EMBEDDING_PROVIDER: openai
@@ -63,10 +62,10 @@ services:
 
   postgres:
     image: pgvector/pgvector:pg16
+    env_file: ../.env
     environment:
       POSTGRES_DB: knowledge_agent
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -79,8 +78,6 @@ services:
   redis:
     image: redis:7-alpine
     env_file: ../.env
-    environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     command: >
       sh -c 'if [ -n "$$REDIS_PASSWORD" ]; then
         exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD";
