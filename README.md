@@ -8,11 +8,20 @@
 
 当前已具备管理员/访客双端、批量文件上传、文件/网页/Git 分类来源列表、来源更新删除、持久化后台任务、独立 FastAPI/FlagEmbedding BGE-M3 Embedding 服务、pgvector 检索、DeepSeek SSE 问答、候选知识侧边审核、CI、可观测与部署基础。上传或同步完成解析后创建任务，Worker 自动完成 Embedding 和活动版本切换；候选知识抽取作为增强步骤执行，失败或跳过不影响问答知识先可用。
 
-当前问答链路对项目、技能和岗位类问题优先使用按来源均衡的结构化快速检索，保证简历和各项目仓库共同提供证据；其他问题使用 pgvector 检索。没有证据时直接拒答，不调用模型补全。DeepSeek 增量通过 SSE 到达浏览器，前端使用安全清洗后的 Markdown 渲染并逐帧显示。知识图谱可视化、学习复习和复杂关系推理暂时搁置到后续版本，当前不占用管理端主界面。
+当前问答链路对项目、技能和岗位类问题优先使用按来源均衡的结构化快速检索，保证简历和各项目仓库共同提供证据；其他问题使用 pgvector 检索。检索结果为空时确定性拒答，不调用模型补全；当前尚无相似度数值阈值，低相关但非空的结果仍可能进入 Prompt。DeepSeek 增量通过 SSE 到达浏览器，前端使用安全清洗后的 Markdown 渲染并逐帧显示。知识图谱可视化、学习复习和复杂关系推理暂时搁置到后续版本，当前不占用管理端主界面。
 
 导入链路已增加基础清洗：PDF/Markdown/TXT 会清理页码、重复空白和重复行；Git 项目支持本地允许目录或 GitHub 仓库 URL，导入时优先保留 README、设计/技术文档、配置摘要和代码结构摘要，过滤依赖、测试、构建产物、密钥文件和泛化学习资料，避免把无关源码噪声直接暴露给访客问答。
 
 开发环境默认通过 OpenAI 兼容协议接入 DeepSeek，默认模型为 `deepseek-chat`。真实 API Key 仅通过本地 `.env` 的 `LLM_API_KEY` 注入，禁止提交到仓库。私人简历、学习笔记、项目源码与上传文件同样不得提交到公开仓库。
+
+## 已测基线（2026-09-15）
+
+- 自动化：后端 74 项收集用例中 73 项通过、1 项因本机未配置真实依赖而跳过；Ruff 通过，前端 Vite 生产构建通过。隔离 PostgreSQL/pgvector 数据库完成全部 11 版 Alembic 迁移和真实 BGE-M3 检索。
+- 已部署站点 `https://laylight.asia`：已发布知识库有 22 个 READY 来源、50 个活动 Chunk。12 道人工标注主要正确文档的可回答题，服务器只读评测的**文档级** Recall@1/4/10 为 9/12（75%）、11/12（91.7%）、12/12（100%）；另有 2 道不可回答题。每题仅标注一个主要文档，来源召回不等于正确段落或最终答案正确率。
+- 同一题集的线上 SSE 问答 14/14 收到完成事件；12 道可回答题中，Top 4 引用包含标注文档为 11/12，最终答案覆盖全部预期关键词为 10/12。两道不可回答题均拒绝了预测，但引用了无关来源；样本太少，不能宣称总体拒答率。
+- Windows 客户端经公网 HTTPS 测得 14 道混合题首字 P50/P95 为 1.563/1.992 秒、总耗时 P50/P95 为 2.174/2.758 秒。串行重复题 10 次有一次总耗时约 17.7 秒；这些是包含网络往返的小样本计时，不是独占服务器吞吐或生产 SLA。
+
+当前服务器 backend 已核实 `APP_ENV=development`，因此 `/health/ready` 虽返回 200，`checks` 仍为空，尚未启用生产模式的数据库和 Redis 就绪探针。切换 production 前需先核对强密钥、DeepSeek Key、限流及数据库/Redis 配置，再重建并复测。评测口径与漏答案例见 [验证与评测说明](docs/验证与评测说明.md)，切换前置条件见 [上线运行手册](docs/上线运行手册.md)。
 
 ## 本地启动
 
@@ -76,10 +85,11 @@ python -m app.infrastructure.bootstrap_admin your-email@example.com
 
 ## Docker Compose
 
-复制 `.env.example` 为 `.env` 并替换密钥占位符，然后执行：
+复制 `.env.example` 为 `.env` 并替换密钥占位符；线上还须完成运行手册中的生产配置检查。仓库根目录启动 Compose 时显式传入同一份 `.env`，避免服务环境与 Compose 插值不一致：
 
 ```bash
-docker compose -f deploy/docker-compose.yml up --build
+docker compose --env-file .env -f deploy/docker-compose.yml up -d --build
+docker compose --env-file .env -f deploy/docker-compose.yml ps
 ```
 
 应用通过 `http://localhost:8080` 访问。
