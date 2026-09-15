@@ -1,0 +1,14 @@
+{"id":"rag-top-k","question":"会话问答和通用检索分别使用多少条证据？","answerable":true,"expected_terms":["Top 4","Top 10"],"gold_source_names":["项目1技术文档.md"]}
+{"id":"worker-lease","question":"后台入库任务怎样抢占和恢复超时任务？","answerable":true,"expected_terms":["SKIP LOCKED","租约"],"gold_source_names":["项目1技术文档.md"]}
+{"id":"role-boundary","question":"管理员与访客分别拥有哪些知识操作权限？","answerable":true,"expected_terms":["管理员","访客"],"gold_source_names":["项目1设计文档.md"]}
+{"id":"graph-database","question":"为什么当前没有独立部署 Neo4j？","answerable":true,"expected_terms":["Neo4j","PostgreSQL"],"gold_source_names":["项目1设计文档.md"]}
+{"id":"backup-retention","question":"数据库备份默认保留多少天？","answerable":true,"expected_terms":["14 天"],"gold_source_names":["上线运行手册.md"]}
+{"id":"embedding-deployment","question":"服务器聊天模型与 Embedding 分别如何部署？","answerable":true,"expected_terms":["DeepSeek","BGE-M3"],"gold_source_names":["上线运行手册.md"]}
+{"id":"graph-evidence","question":"没有原文证据的图谱推断如何标记和用于回答？","answerable":true,"expected_terms":["INFERRED","证据"],"gold_source_names":["持续学习与知识图谱设计.md"]}
+{"id":"review-algorithm","question":"复习任务初期计划采用哪种间隔算法？","answerable":true,"expected_terms":["SM-2"],"gold_source_names":["持续学习与知识图谱设计.md"]}
+{"id":"git-clone-diagnosis","question":"GitHub 仓库同步出现 Unable to clone 时怎样避免交互式认证？","answerable":true,"expected_terms":["Unable to clone","GIT_TERMINAL_PROMPT"],"gold_source_names":["开发文档.md"]}
+{"id":"sse-render-diagnosis","question":"SSE 已到达而页面最后一次性显示是什么原因？","answerable":true,"expected_terms":["响应式","Vue"],"gold_source_names":["开发文档.md"]}
+{"id":"batch-upload-limit","question":"管理员单次最多可以导入多少个 PDF 或 Markdown 文件？","answerable":true,"expected_terms":["20 个"],"gold_source_names":["管理员使用说明.md"]}
+{"id":"candidate-review","question":"管理员审核候选关系时优先检查什么？","answerable":true,"expected_terms":["关系方向","证据"],"gold_source_names":["管理员使用说明.md"]}
+{"id":"unknown-weather","question":"明天上海的天气如何？","answerable":false,"expected_terms":[]}
+{"id":"unknown-stock","question":"今天某只股票会涨多少？","answerable":false,"expected_terms":[]}

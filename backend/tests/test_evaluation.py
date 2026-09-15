@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from app.evaluation.runner import evaluate_retrieval, load_cases, report_json
+from app.evaluation.runner import EvaluationCase, evaluate_retrieval, load_cases, report_json
 from app.retrieval.service import RetrievalResult
 
 
@@ -26,7 +26,35 @@ async def test_retrieval_evaluation_metrics() -> None:
     report = await evaluate_retrieval(cases, search)
 
     assert report.cases == 12
-    assert report.recall_at_k == 1.0
+    assert report.answerable_cases == 10
+    assert report.unanswerable_cases == 2
+    assert report.gold_labeled_cases == 0
+    assert report.recall_at_k is None
     assert report.answerable_hit_rate == 1.0
-    assert report.unanswerable_recall == 1.0
-    assert '"recall_at_k": 1.0' in report_json(report)
+    assert report.unanswerable_empty_rate == 1.0
+    assert report.overall_case_success_rate == 1.0
+    assert '"recall_at_k": null' in report_json(report)
+
+
+@pytest.mark.asyncio
+async def test_document_recall_uses_gold_sources_not_all_cases() -> None:
+    cases = [
+        EvaluationCase("a", "a", True, ["A"], ["doc-a", "doc-b"]),
+        EvaluationCase("b", "b", True, ["B"], ["doc-c"]),
+        EvaluationCase("unknown", "unknown", False, []),
+    ]
+
+    async def search(question: str) -> list[RetrievalResult]:
+        if question == "a":
+            return [RetrievalResult("a", "A", 1.0, {"source_name": "doc-a"})]
+        if question == "b":
+            return [RetrievalResult("b", "B", 1.0, {"source_name": "doc-c"})]
+        return [RetrievalResult("x", "unrelated", 1.0, {"source_name": "doc-x"})]
+
+    report = await evaluate_retrieval(cases, search)
+
+    assert report.gold_labeled_cases == 2
+    assert report.recall_at_k == 0.75
+    assert report.answerable_hit_rate == 1.0
+    assert report.unanswerable_empty_rate == 0.0
+    assert report.overall_case_success_rate == 2 / 3

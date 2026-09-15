@@ -12,14 +12,19 @@ class EvaluationCase:
     question: str
     answerable: bool
     expected_terms: list[str]
+    gold_source_names: list[str] | None = None
 
 
 @dataclass(frozen=True)
 class EvaluationReport:
     cases: int
-    recall_at_k: float
+    answerable_cases: int
+    unanswerable_cases: int
+    gold_labeled_cases: int
+    recall_at_k: float | None
     answerable_hit_rate: float
-    unanswerable_recall: float
+    unanswerable_empty_rate: float
+    overall_case_success_rate: float
 
 
 def load_cases(path: Path) -> list[EvaluationCase]:
@@ -35,6 +40,7 @@ async def evaluate_retrieval(
     search: Callable[[str], Awaitable[list[RetrievalResult]]],
 ) -> EvaluationReport:
     answerable_total = answerable_hits = unanswerable_total = unanswerable_hits = 0
+    gold_recalls: list[float] = []
     for case in cases:
         results = await search(case.question)
         combined = " ".join(result.content.casefold() for result in results)
@@ -42,6 +48,14 @@ async def evaluate_retrieval(
             answerable_total += 1
             if all(term.casefold() in combined for term in case.expected_terms):
                 answerable_hits += 1
+            if case.gold_source_names:
+                gold = set(case.gold_source_names)
+                retrieved = {
+                    result.metadata.get("source_name")
+                    for result in results
+                    if result.metadata and isinstance(result.metadata.get("source_name"), str)
+                }
+                gold_recalls.append(len(gold & retrieved) / len(gold))
         else:
             unanswerable_total += 1
             if not results:
@@ -51,9 +65,13 @@ async def evaluate_retrieval(
     total_hits = answerable_hits + unanswerable_hits
     return EvaluationReport(
         cases=len(cases),
-        recall_at_k=total_hits / len(cases) if cases else 0.0,
+        answerable_cases=answerable_total,
+        unanswerable_cases=unanswerable_total,
+        gold_labeled_cases=len(gold_recalls),
+        recall_at_k=sum(gold_recalls) / len(gold_recalls) if gold_recalls else None,
         answerable_hit_rate=answerable_rate,
-        unanswerable_recall=unanswerable_rate,
+        unanswerable_empty_rate=unanswerable_rate,
+        overall_case_success_rate=total_hits / len(cases) if cases else 0.0,
     )
 
 
