@@ -6,7 +6,7 @@
 
 ## 当前状态
 
-当前已具备管理员/访客双端、批量文件上传、文件/网页/Git 分类来源列表、来源更新删除、持久化后台任务、GitHub Models Embedding、pgvector 检索、DeepSeek SSE 问答、候选知识侧边审核、CI、可观测与部署基础。上传或同步完成解析后创建任务，Worker 自动完成 Embedding 和活动版本切换；候选知识抽取作为增强步骤执行，失败或跳过不影响问答知识先可用。
+当前已具备管理员/访客双端、批量文件上传、文件/网页/Git 分类来源列表、来源更新删除、持久化后台任务、独立 FastAPI/FlagEmbedding BGE-M3 Embedding 服务、pgvector 检索、DeepSeek SSE 问答、候选知识侧边审核、CI、可观测与部署基础。上传或同步完成解析后创建任务，Worker 自动完成 Embedding 和活动版本切换；候选知识抽取作为增强步骤执行，失败或跳过不影响问答知识先可用。
 
 当前问答链路对项目、技能和岗位类问题优先使用按来源均衡的结构化快速检索，保证简历和各项目仓库共同提供证据；其他问题使用 pgvector 检索。没有证据时直接拒答，不调用模型补全。DeepSeek 增量通过 SSE 到达浏览器，前端使用安全清洗后的 Markdown 渲染并逐帧显示。知识图谱可视化、学习复习和复杂关系推理暂时搁置到后续版本，当前不占用管理端主界面。
 
@@ -29,16 +29,14 @@ uvicorn app.main:app --reload
 
 访问 `http://localhost:8000/health` 或 `http://localhost:8000/docs`。
 
-开发环境可使用 GitHub Models 的 OpenAI 兼容 Embedding 接口：
+Docker Compose 的主路径使用独立 Embedding 服务；本机不启动 Compose 时可用 Ollama 回退。不要再配置已下线的 GitHub Models Embedding Token：
 
 ```env
-EMBEDDING_BASE_URL=https://models.github.ai/inference
-EMBEDDING_MODEL=openai/text-embedding-3-small
-EMBEDDING_PROVIDER=ollama
+EMBEDDING_PROVIDER=openai
 EMBEDDING_MODEL=bge-m3
-EMBEDDING_BASE_URL=http://localhost:11434
+EMBEDDING_BASE_URL=http://embedding:8001/v1
 EMBEDDING_DIMENSIONS=1024
-EMBEDDING_API_KEY=your-fine-grained-token
+EMBEDDING_API_KEY=local-embedding-service
 BACKGROUND_WORKER_ENABLED=true
 ADMIN_USERNAME=your-admin-name
 ADMIN_PASSWORD=your-admin-password
@@ -55,7 +53,7 @@ Ollama 的 `bge-m3` 保留为本地开发或故障回退：
 ollama pull bge-m3
 ```
 
-需要使用 Ollama 回退时，将 `EMBEDDING_PROVIDER=ollama`、`EMBEDDING_BASE_URL=http://host.docker.internal:11434`。首次切换到 BGE-M3 或切换提供方后执行 `alembic upgrade head` 和 `python scripts/reindex_embeddings.py`，以重建原有向量。
+需要使用 Ollama 回退时，将 `EMBEDDING_PROVIDER=ollama`、`EMBEDDING_BASE_URL=http://host.docker.internal:11434`；本机直接运行后端时用 `http://localhost:11434`。首次切换到 BGE-M3 或切换提供方后执行 `alembic upgrade head` 和 `python scripts/reindex_embeddings.py`，以重建原有向量。
 
 ## 测试
 

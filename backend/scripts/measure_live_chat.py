@@ -115,6 +115,9 @@ async def send_chat(
         "ttft_ms": round((first_delta - started) * 1000, 2) if first_delta else None,
         "total_ms": round((finished - started) * 1000, 2) if finished else None,
         "citations": source_names,
+        "gold_source_recall_at_1": len(gold & set(source_names[:1])) / len(gold)
+        if gold
+        else None,
         "gold_source_recall_at_4": len(gold & set(source_names)) / len(gold) if gold else None,
         "answer_term_coverage": all(
             term.casefold() in text.casefold() for term in case.expected_terms
@@ -218,7 +221,12 @@ async def run(args: argparse.Namespace) -> None:
     def success(item: dict[str, object]) -> bool:
         return item["error_code"] is None and item["total_ms"] is not None
 
-    gold_recalls = [
+    gold_recalls_1 = [
+        float(item["gold_source_recall_at_1"])
+        for item in baseline
+        if item.get("gold_source_recall_at_1") is not None
+    ]
+    gold_recalls_4 = [
         float(item["gold_source_recall_at_4"])
         for item in baseline
         if item.get("gold_source_recall_at_4") is not None
@@ -234,8 +242,11 @@ async def run(args: argparse.Namespace) -> None:
         "labeled_cases": len(cases),
         "baseline": {
             "successes": sum(success(item) for item in baseline),
-            "gold_source_recall_at_4": round(statistics.mean(gold_recalls), 4)
-            if gold_recalls
+            "gold_source_recall_at_1": round(statistics.mean(gold_recalls_1), 4)
+            if gold_recalls_1
+            else None,
+            "gold_source_recall_at_4": round(statistics.mean(gold_recalls_4), 4)
+            if gold_recalls_4
             else None,
             "answer_term_coverage": round(
                 sum(bool(item["answer_term_coverage"]) for item in answerable) / len(answerable), 4
